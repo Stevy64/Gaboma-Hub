@@ -38,7 +38,7 @@ def home(request):
         available = list(apps.exclude(website_url="").order_by("-created_at")[:8])
         spotlight = available[:3]
         discovery_rails = [
-            {"id": "available-apps", "title": "À portée de main", "subtitle": "Des apps à ouvrir, dès maintenant.", "icon": "sparkles", "apps": available},
+            {"id": "available-apps", "title": "Nouvellement ajoutées", "subtitle": "Des apps à ouvrir, dès maintenant.", "icon": "sparkles", "apps": available},
             {"id": "upcoming-apps", "title": "Les projets à suivre", "subtitle": "Les projets dont le lien reste à compléter.", "icon": "clock", "apps": list(apps.filter(website_url="").order_by("-created_at")[:8])},
         ]
         rated_apps = list(apps.filter(review_count__gt=0).order_by("-average_rating", "-review_count")[:8])
@@ -49,7 +49,7 @@ def home(request):
     if layout in {"grid", "list"}:
         request.session["catalogue_layout"] = layout
     else:
-        layout = request.session.get("catalogue_layout", "list")
+        layout = request.session.get("catalogue_layout", "grid")
     layout_urls = {}
     for mode in ["grid", "list"]:
         params = request.GET.copy()

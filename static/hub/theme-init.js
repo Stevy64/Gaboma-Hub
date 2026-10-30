@@ -2,6 +2,6 @@
 (() => {
   let preference;
   try { preference = localStorage.getItem('gaboma-theme'); } catch (_) {}
-  const dark = preference === 'dark' || (preference !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+  const dark = preference === 'dark';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 })();

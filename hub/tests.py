@@ -83,12 +83,12 @@ class HomepageOptionsTests(HubTestCase):
         self.assertEqual(self.client.get("/").context["layout"], "grid")
         self.assertEqual(self.client.get("/", {"affichage": "list"}).context["layout"], "list")
         self.assertEqual(self.client.get("/", {"affichage": "bad"}).context["layout"], "list")
-    def test_default_layout_is_current_list_and_buttons_are_accessible(self):
+    def test_default_layout_is_grid_and_buttons_are_accessible(self):
         response = self.client.get("/")
-        self.assertEqual(response.context["layout"], "list")
+        self.assertEqual(response.context["layout"], "grid")
         self.assertContains(response, 'aria-label="Affichage des applications"')
-        self.assertContains(response, 'class="app-grid layout-list"')
-        self.assertContains(response, 'name="affichage" value="list"')
+        self.assertContains(response, 'class="app-grid layout-grid"')
+        self.assertContains(response, 'name="affichage" value="grid"')
     def test_hero_background_can_be_enabled_disabled_and_removed(self):
         appearance = HubAppearance.objects.create(hero_background="editorial/hero.webp")
         self.assertContains(self.client.get("/"), 'class="hero-background-image"')
@@ -98,7 +98,7 @@ class HomepageOptionsTests(HubTestCase):
         appearance.hero_background_enabled = True
         appearance.hero_background = ""
         appearance.save()
-        self.assertNotContains(self.client.get("/"), 'class="hero-background-image"')
+        self.assertContains(self.client.get("/"), "hub/images/libreville-damas.jpg")
     def test_only_active_in_date_advertisements_visible(self):
         now = timezone.now()
         base = {"image": "editorial/ad.webp", "is_active": True}
@@ -479,11 +479,12 @@ class ManagedShowcaseTests(HubTestCase):
             Advertisement.objects.create(**values)
         response = self.client.get("/")
         self.assertEqual([ad.title for ad in response.context["showcase_ads"]], ["Premier visuel", "Second visuel"])
-        self.assertContains(response, 'id="hero-showcase"')
+        self.assertNotContains(response, 'id="hero-showcase"')
+        self.assertContains(response, 'class="hub-hero-art"')
         self.assertNotContains(response, "Pas encore")
         self.assertNotContains(response, "Terminé")
         self.assertNotContains(response, "Désactivé")
-        self.assertContains(response, "PUBLICITÉ")
+        self.assertNotContains(response, "Premier visuel")
 
     def test_settings_control_copy_sections_and_escape_text(self):
         HubAppearance.objects.create(hero_title="<script>test</script>", showcase_enabled=False, discovery_enabled=False)

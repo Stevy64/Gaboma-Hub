@@ -1,0 +1,12 @@
+{% load hub_tags %}
+<aside id="console-sidebar" class="hub-admin-sidebar" aria-label="Menu de gestion">
+<div class="console-sidebar-heading"><span>ESPACE DE GESTION</span><button type="button" class="console-menu-close" aria-label="Fermer le menu">×</button></div>
+<nav aria-label="Gestion du Hub">
+<a class="console-nav-link" href="{% url 'admin:index' %}"><span class="nav-ico">{% ui_icon 'grid' %}</span><span>Vue d’ensemble</span></a>
+{% if perms.hub.view_application %}<a class="console-nav-link" href="{% url 'admin:hub_application_workflow' %}"><span class="nav-ico">{% ui_icon 'check' %}</span><span>Soumissions à traiter</span></a>{% endif %}
+{% for app in available_apps reversed %}<p class="console-nav-heading">{% if app.app_label == 'hub' %}Catalogue & activité{% else %}Accès & utilisateurs{% endif %}</p>{% for model in app.models %}{% if model.admin_url %}<a class="console-nav-link" href="{{ model.admin_url }}"><span class="nav-ico">{% model_icon model.object_name %}</span><span>{{ model.name }}</span></a>{% endif %}{% endfor %}{% endfor %}
+<p class="console-nav-heading">Accès rapide</p>
+<a class="console-nav-link" href="{% url 'hub:home' %}"><span class="nav-ico">{% ui_icon 'external' %}</span><span>Retour au Hub</span></a>
+</nav>
+</aside>
+<button class="console-menu-scrim" aria-label="Fermer le menu" type="button" hidden></button>

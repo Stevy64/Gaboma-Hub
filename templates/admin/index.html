@@ -1,12 +1,14 @@
 {% extends "admin/index.html" %}{% load hub_tags %}
 {% block content_title %}{% endblock %}
 {% block coltype %}colMS console-dashboard{% endblock %}
-{% block nav-sidebar %}{% include "admin/nav_sidebar.html" %}{% endblock %}
+{% block nav-sidebar %}{% include 'admin/_console_sidebar.html' %}{% endblock %}
 {% block content %}
 {% console_metrics as metrics %}
 <section class="console-welcome"><span>VOTRE ESPACE DE PILOTAGE</span><h1>Bonjour {{ user.get_short_name|default:user.username }}.</h1><p>Faites grandir le catalogue, accompagnez les créateurs et donnez de la visibilité aux apps d’ici.</p><a href="{% url 'hub:home' %}">Voir le Hub ↗</a></section>
-<div class="console-metrics">{% for item in metrics %}<a href="{{ item.url }}"><span>{{ item.label }}</span><strong>{{ item.value }}</strong><small>{{ item.help }} →</small></a>{% endfor %}</div>
+<div class="console-metrics">{% for item in metrics %}<a href="{{ item.url }}"><span class="metric-ico">{% ui_icon item.icon %}</span><span>{{ item.label }}</span><strong>{{ item.value }}</strong><small>{{ item.help }} →</small></a>{% endfor %}</div>
 {% if perms.hub.view_application %}<a class="flow-entry" href="{% url 'admin:hub_application_workflow' %}"><span>SOUMISSIONS & PAIEMENTS</span><strong>Chaque dossier, de la fiche à la publication →</strong><small>Contrôler les paiements, accompagner les créateurs et valider les apps.</small></a>{% endif %}
 <h2 class="console-section-title">Gérer mon Hub</h2>
-{{ block.super }}
+<div id="content-main" class="console-manage">{% for app in app_list reversed %}<section class="console-group"><h3>{% if app.app_label == 'hub' %}Catalogue & activité{% else %}Accès & utilisateurs{% endif %}</h3><div class="console-resource-grid">{% for model in app.models %}<article class="console-resource"><div><span class="resource-ico">{% model_icon model.object_name %}</span><h4>{{ model.name }}</h4></div><div class="console-resource-actions">{% if model.admin_url %}<a href="{{ model.admin_url }}">Gérer →</a>{% endif %}{% if model.add_url %}<a href="{{ model.add_url }}" aria-label="Ajouter : {{ model.name }}">+ Ajouter</a>{% endif %}</div></article>{% endfor %}</div></section>{% endfor %}</div>
 {% endblock %}
+
+{% block sidebar %}{% endblock %}

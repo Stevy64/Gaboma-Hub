@@ -12,7 +12,7 @@ class HubAppearance(models.Model):
     hero_background = models.ImageField("image de fond du Hero", upload_to=editorial_image_path, blank=True)
     hero_background_enabled = models.BooleanField("activer l'image de fond", default=True)
     submission_fee = models.PositiveIntegerField("tarif de référencement (FCFA)", default=2000, validators=[MinValueValidator(1), MaxValueValidator(1000000)], help_text="Appliqué uniquement aux nouvelles fiches. Les fiches et paiements existants conservent leur tarif.")
-    hero_badge = models.CharField("accroche", max_length=80, default="LE NUMÉRIQUE, CÔTÉ GABON.")
+    hero_badge = models.CharField("accroche", max_length=80, default="LE GABON NUMÉRIQUE.")
     hero_title = models.CharField("titre d'accueil", max_length=80, default="Les apps d’ici.")
     hero_subtitle = models.CharField("titre mis en couleur", max_length=100, default="Pour votre quotidien.")
     hero_description = models.CharField("description d'accueil", max_length=240, default="Découvrez les applications des créateurs gabonais. Vos prochains essentiels sont ici.")

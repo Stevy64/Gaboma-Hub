@@ -1,1 +1,1 @@
-{% extends "admin/change_form.html" %}{% block object-tools-items %}{% if original %}<li><a href="{% url 'admin:hub_application_workflow_detail' original.pk %}">Suivre ce dossier</a></li>{% endif %}{{ block.super }}{% endblock %}
+{% extends "admin/change_form.html" %}{% load hub_tags %}{% block object-tools-items %}{% if original %}<li><a href="{% url 'admin:hub_application_workflow_detail' original.pk %}">{% ui_icon 'check' %}Suivre ce dossier</a></li>{% endif %}{{ block.super }}{% endblock %}

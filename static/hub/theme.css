@@ -69,3 +69,30 @@ html[data-theme=dark]{color-scheme:dark;--paper:#101827;--ink:#edf3fc;--muted:#a
 
 [data-theme=dark] .layout-choice{color:#b9c9df}
 @media(prefers-reduced-motion:no-preference){.header{transition:height .22s ease,box-shadow .22s ease,background-color .18s ease,color .18s ease,border-color .18s ease}}
+
+/* Photo supplied by the owner; dark scrim in both themes for consistent contrast. */
+html .editorial-hero.has-hero-background::before{background:linear-gradient(100deg,rgba(7,22,42,.88) 0%,rgba(8,28,47,.76) 52%,rgba(8,25,44,.62) 100%)}
+html .editorial-hero.has-hero-background h1{color:#fff}html .editorial-hero.has-hero-background h1 em{color:#a9ccff}html .editorial-hero.has-hero-background .hero-description{color:#e4ebf5}html .editorial-hero.has-hero-background .creator-link{color:#e4ebf5}html .editorial-hero.has-hero-background .local-badge{background:#123a30df;color:#d8f3e8;border-color:#69ae8d66}html .editorial-hero.has-hero-background .hero-stat{background:#12283de8;border-color:#a7c8e333}html .editorial-hero.has-hero-background .hero-stat strong{color:#fff}html .editorial-hero.has-hero-background .hero-stat span{color:#d3e1f0}html .editorial-hero.has-hero-background .hero-stat>.ui-icon{color:#a9ccff}html .editorial-hero.has-hero-background .hero-background-image{object-position:center 58%}html .editorial-hero.has-hero-background .showcase-controls{color:#e4ebf5}
+@media(max-width:760px){html .editorial-hero.has-hero-background::before{background:linear-gradient(180deg,#071a2dd9,#071a2de8)}html .editorial-hero.has-hero-background .hero-background-image{object-position:48% center}}
+
+html .editorial-hero.has-hero-background .showcase-navigation,html .editorial-hero.has-hero-background .showcase-navigation small{color:#dce8f7}
+
+/* Full-width, lightweight hero. Keep the catalogue constrained for readability. */
+main:has(> .hub-hero-wide){max-width:none;width:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1180px) minmax(0,1fr)}
+main:has(> .hub-hero-wide)>*{grid-column:2;min-width:0}
+html main>.editorial-hero.hub-hero-wide{grid-column:1/-1;box-sizing:border-box;width:100%;max-width:none;margin:0 0 26px;padding:48px max(24px,calc((100% - 1180px)/2));border-radius:24px 24px 44px 44px;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:44px;overflow:hidden;isolation:isolate}
+.hub-hero-wide .gabon-hero-copy{max-width:650px}.hub-hero-wide .hero-stats{max-width:530px}.hub-hero-wide .hero-description{max-width:490px}
+.hub-hero-art{position:relative;width:100%;max-width:440px;height:370px;justify-self:center;pointer-events:none;color:#e5f0ff}
+.hub-orbit{position:absolute;border:1px solid #bbd8ff33;border-radius:50%;inset:25px;transform:rotate(-24deg)}.orbit-two{inset:70px -10px;border-style:dashed;opacity:.55;transform:rotate(26deg)}
+.hub-art-core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;width:190px;height:190px;border:1px solid #c0d8ff44;border-radius:48px;background:linear-gradient(135deg,#204974c9,#112c49cc);box-shadow:0 18px 45px #03152822}.hub-art-core>.ui-icon{width:52px;height:52px;stroke-width:1.3;color:#bcd8ff}.hub-art-core>span{font-size:23px;font-weight:650;letter-spacing:-1px}.art-dot{color:#ffc46f}.hub-art-core small{font-size:10px;color:#c6d7e8}
+.hub-art-tile{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;width:100px;height:94px;background:#19394cbb;border:1px solid #d4e7ff33;border-radius:25px;color:#f0f5ff;box-shadow:0 8px 24px #06182c16}.hub-art-tile>.ui-icon{width:28px;height:28px;stroke-width:1.5}.hub-art-tile>span{font-size:10px;letter-spacing:.3px}.art-commerce{top:8px;left:12px;transform:rotate(-8deg);color:#b9ecd9}.art-services{top:12px;right:10px;transform:rotate(8deg);color:#d1e4ff}.art-discover{bottom:8px;left:10px;transform:rotate(6deg);color:#ffe5a2}.art-community{bottom:6px;right:4px;transform:rotate(-6deg);color:#cbe0ff}
+.hub-hero-wide:not(.has-hero-background){background:#102b46}.hub-hero-wide:not(.has-hero-background) h1{color:#fff}.hub-hero-wide:not(.has-hero-background) h1 em{color:#a9ccff}.hub-hero-wide:not(.has-hero-background) .hero-description,.hub-hero-wide:not(.has-hero-background) .creator-link{color:#dce8f7}
+@media(max-width:900px){html main>.editorial-hero.hub-hero-wide{gap:24px;padding:36px 24px}.hub-hero-art{max-width:320px;height:330px}.hub-art-core{width:160px;height:160px;border-radius:38px}.hub-art-tile{width:80px;height:82px}.hub-art-core>span{font-size:20px}}
+@media(max-width:760px){html main>.editorial-hero.hub-hero-wide{grid-template-columns:minmax(0,1fr);gap:24px;padding:30px 20px 26px;border-radius:18px 18px 30px 30px;margin:0 0 22px}.hub-hero-art{height:auto;max-width:440px;display:flex;justify-content:space-between;gap:8px}.hub-orbit,.hub-art-core{display:none}.hub-art-tile{position:static;transform:none;width:auto;flex:1;height:69px;border-radius:18px;background:#17364a88;box-shadow:none;gap:7px}.hub-art-tile>.ui-icon{width:22px;height:22px}.hub-art-tile>span{font-size:8px}.hub-hero-wide .hero-stats{margin-top:22px}.hub-hero-wide .gabon-signature{margin-bottom:14px}}
+
+/* Feuille d'accueil façon Fallaman : coins hauts arrondis qui recouvrent le hero. */
+html main>.editorial-hero.hub-hero-wide{border-radius:0;margin-bottom:0;padding-bottom:78px;z-index:0;mask-image:none;-webkit-mask-image:none}
+html main:has(>.hub-hero-wide)>.home-sheet{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1180px) minmax(0,1fr);position:relative;z-index:2;margin-top:-40px;padding:26px 0 8px;background:#f7f8fa;border-radius:40px 40px 0 0;box-shadow:0 -16px 36px rgba(16,28,48,.08)}
+.home-sheet>*{grid-column:2;min-width:0}
+[data-theme=dark] .home-sheet{background:#101827;box-shadow:0 -18px 40px rgba(0,0,0,.38)}
+@media(max-width:760px){html main>.editorial-hero.hub-hero-wide{row-gap:32px;padding-bottom:58px;border-radius:0}.hub-hero-wide .hub-hero-art{margin-top:32px}.hub-hero-wide .hero-stats{margin-bottom:0}.home-sheet{margin-top:-28px;padding-top:18px;border-radius:28px 28px 0 0}}

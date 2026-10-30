@@ -19,17 +19,17 @@
     try { localStorage.setItem('gaboma-theme', theme); } catch (_) {}
     apply(theme);
   });
-  system.addEventListener('change', event => { if (!explicit) apply(event.matches ? 'dark' : 'light'); });
+
   window.addEventListener('pageshow', () => {
     try {
       const saved = localStorage.getItem('gaboma-theme');
       explicit = ['light', 'dark'].includes(saved);
-      apply(explicit ? saved : system.matches ? 'dark' : 'light');
+      apply(explicit ? saved : 'light');
     } catch (_) {}
   });
   window.addEventListener('storage', event => {
     if (event.key !== 'gaboma-theme' && event.key !== null) return;
     explicit = ['light', 'dark'].includes(event.newValue);
-    apply(explicit ? event.newValue : system.matches ? 'dark' : 'light');
+    apply(explicit ? event.newValue : 'light');
   });
 })();

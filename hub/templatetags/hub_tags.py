@@ -46,6 +46,24 @@ ICONS = {
 def ui_icon(name):
     return format_html('<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{}</svg>', mark_safe(ICONS.get(name, ICONS["grid"])))
 
+MODEL_ICONS = {
+    "Application": "grid",
+    "Category": "filter",
+    "Favorite": "heart",
+    "Payment": "wallet",
+    "PaymentEvent": "clock",
+    "Review": "star",
+    "HubAppearance": "palette",
+    "Advertisement": "image",
+    "HubVisitor": "eye",
+    "User": "user",
+    "Group": "shield",
+}
+
+@register.simple_tag
+def model_icon(object_name):
+    return ui_icon(MODEL_ICONS.get(object_name, "chevron-right"))
+
 @register.simple_tag
 def field_icon(name):
     mapping = {"username": "user", "email": "mail", "name": "grid", "category": "grid", "creator_name": "user", "creator_city": "pin", "description": "text", "about": "text", "website_url": "link", "logo": "image", "banner": "image", "color": "palette", "confirmation": "shield", "comment": "message", "rating": "star"}
@@ -65,14 +83,14 @@ def console_metrics(context):
     result = []
     if user.has_perm('hub.view_application'):
         result.extend([
-            {'label': 'Applications publiées', 'value': Application.objects.filter(status='published').count(), 'help': 'Explorer le catalogue', 'url': reverse('admin:hub_application_changelist') + '?status__exact=published'},
-            {'label': 'À valider', 'value': Application.objects.filter(status='review').count(), 'help': 'Examiner les soumissions', 'url': reverse('admin:hub_application_workflow') + '?stage=review'},
+            {'label': 'Applications publiées', 'value': Application.objects.filter(status='published').count(), 'help': 'Explorer le catalogue', 'icon': 'grid', 'url': reverse('admin:hub_application_changelist') + '?status__exact=published'},
+            {'label': 'À valider', 'value': Application.objects.filter(status='review').count(), 'help': 'Examiner les soumissions', 'icon': 'check', 'url': reverse('admin:hub_application_workflow') + '?stage=review'},
         ])
     if user.has_perm('hub.view_payment'):
-        result.append({'label': 'Paiements en attente', 'value': Payment.objects.filter(status='pending').count(), 'help': 'Vérifier les transactions', 'url': reverse('admin:hub_application_workflow') + '?stage=pending' if user.has_perm('hub.view_application') else reverse('admin:hub_payment_changelist') + '?status__exact=pending'})
-        result.append({'label': 'Paiements confirmés', 'value': Payment.objects.filter(status='success').count(), 'help': 'Suivre les paiements', 'url': reverse('admin:hub_payment_changelist') + '?status__exact=success'})
+        result.append({'label': 'Paiements en attente', 'value': Payment.objects.filter(status='pending').count(), 'help': 'Vérifier les transactions', 'icon': 'wallet', 'url': reverse('admin:hub_application_workflow') + '?stage=pending' if user.has_perm('hub.view_application') else reverse('admin:hub_payment_changelist') + '?status__exact=pending'})
+        result.append({'label': 'Paiements confirmés', 'value': Payment.objects.filter(status='success').count(), 'help': 'Suivre les paiements', 'icon': 'shield', 'url': reverse('admin:hub_payment_changelist') + '?status__exact=success'})
     if user.has_perm('hub.view_advertisement'):
-        result.append({'label': 'Publicités activées', 'value': Advertisement.objects.filter(is_active=True).count(), 'help': 'Gérer la visibilité', 'url': reverse('admin:hub_advertisement_changelist')})
+        result.append({'label': 'Publicités activées', 'value': Advertisement.objects.filter(is_active=True).count(), 'help': 'Gérer la visibilité', 'icon': 'image', 'url': reverse('admin:hub_advertisement_changelist')})
     return result
 
 
