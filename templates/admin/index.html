@@ -1,0 +1,12 @@
+{% extends "admin/index.html" %}{% load hub_tags %}
+{% block content_title %}{% endblock %}
+{% block coltype %}colMS console-dashboard{% endblock %}
+{% block nav-sidebar %}{% include "admin/nav_sidebar.html" %}{% endblock %}
+{% block content %}
+{% console_metrics as metrics %}
+<section class="console-welcome"><span>VOTRE ESPACE DE PILOTAGE</span><h1>Bonjour {{ user.get_short_name|default:user.username }}.</h1><p>Faites grandir le catalogue, accompagnez les créateurs et donnez de la visibilité aux apps d’ici.</p><a href="{% url 'hub:home' %}">Voir le Hub ↗</a></section>
+<div class="console-metrics">{% for item in metrics %}<a href="{{ item.url }}"><span>{{ item.label }}</span><strong>{{ item.value }}</strong><small>{{ item.help }} →</small></a>{% endfor %}</div>
+{% if perms.hub.view_application %}<a class="flow-entry" href="{% url 'admin:hub_application_workflow' %}"><span>SOUMISSIONS & PAIEMENTS</span><strong>Chaque dossier, de la fiche à la publication →</strong><small>Contrôler les paiements, accompagner les créateurs et valider les apps.</small></a>{% endif %}
+<h2 class="console-section-title">Gérer mon Hub</h2>
+{{ block.super }}
+{% endblock %}

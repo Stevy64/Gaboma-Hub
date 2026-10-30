@@ -1,0 +1,81 @@
+name: gaboma-hub-prod
+x-app: &app
+  image: ${HUB_IMAGE:-gaboma-hub:local}
+  build: .
+  env_file: ${HUB_ENV_FILE:-.env.production}
+  environment:
+    DEBUG: "false"
+    DATABASE_URL: postgres://hub:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/hub
+    REDIS_URL: redis://redis:6379/0
+    ALLOWED_HOSTS: ${HUB_DOMAIN:?Set HUB_DOMAIN},localhost,127.0.0.1
+    CSRF_TRUSTED_ORIGINS: https://${HUB_DOMAIN}
+    PUBLIC_BASE_URL: https://${HUB_DOMAIN}
+    TRUST_PROXY_HEADERS: "true"
+    SECURE_SSL_REDIRECT: "true"
+    SESSION_COOKIE_SECURE: "true"
+    CSRF_COOKIE_SECURE: "true"
+  volumes:
+    - media:/app/media
+  depends_on:
+    db: {condition: service_healthy}
+    redis: {condition: service_healthy}
+  security_opt: ["no-new-privileges:true"]
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hub
+      POSTGRES_USER: hub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes: ["postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hub -d hub"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  migrate:
+    <<: *app
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    restart: "no"
+  web:
+    <<: *app
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready/', timeout=5)"]
+      interval: 20s
+      timeout: 6s
+      retries: 3
+      start_period: 30s
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      HUB_DOMAIN: ${HUB_DOMAIN:?Set HUB_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - media:/srv/media:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web: {condition: service_healthy}
+volumes:
+  postgres:
+  media:
+  caddy_data:
+  caddy_config:

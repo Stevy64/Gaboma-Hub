@@ -1,0 +1,1 @@
+{% load hub_tags %}{{ form.non_field_errors }}{% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{% field_icon field.name %}{{ field.label }}</label>{{ field }}{{ field.errors }}{% if field.help_text %}<div class="help-text">{{ field.help_text|safe }}</div>{% endif %}</div>{% endfor %}

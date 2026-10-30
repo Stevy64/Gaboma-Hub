@@ -1,0 +1,37 @@
+name: Deploy Hub to K3s
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'Tested GHCR image, pinned with @sha256:…'
+        required: true
+      context:
+        description: 'Exact production kubectl context'
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: gaboma-hub-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    environment: production
+    # Dedicated runner with Python 3, kubectl and private access to K3s.
+    runs-on: [self-hosted, linux, k3s-hub]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy verified image
+        env:
+          HUB_IMAGE: ${{ inputs.image }}
+          HUB_CONTEXT: ${{ inputs.context }}
+          KUBE_CONFIG: ${{ secrets.HUB_KUBECONFIG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          export KUBECONFIG="$(mktemp)"
+          trap 'rm -f "$KUBECONFIG"' EXIT
+          printf '%s' "$KUBE_CONFIG" > "$KUBECONFIG"
+          python3 deploy/k8s/deploy.py --context "$HUB_CONTEXT" --image "$HUB_IMAGE"
+          curl --fail --retry 5 --retry-delay 3 https://hub.gabomazone.com/health/ready/

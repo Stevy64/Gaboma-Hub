@@ -1,0 +1,201 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "hub-web",
+        "namespace": "gaboma-hub"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "hub-web"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "hub-web"
+            }
+          },
+          "spec": {
+            "automountServiceAccountToken": false,
+            "containers": [
+              {
+                "name": "web",
+                "image": "gaboma-hub:replace",
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "hub-config"
+                    }
+                  },
+                  {
+                    "secretRef": {
+                      "name": "hub-secrets"
+                    }
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 8000
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "media",
+                    "mountPath": "/app/media"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "256Mi"
+                  },
+                  "limits": {
+                    "memory": "768Mi"
+                  }
+                },
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/health/ready/",
+                    "port": 8000
+                  },
+                  "periodSeconds": 10
+                },
+                "livenessProbe": {
+                  "httpGet": {
+                    "path": "/health/live/",
+                    "port": 8000
+                  },
+                  "periodSeconds": 20
+                },
+                "startupProbe": {
+                  "httpGet": {
+                    "path": "/health/live/",
+                    "port": 8000
+                  },
+                  "failureThreshold": 30,
+                  "periodSeconds": 5
+                }
+              },
+              {
+                "name": "media-gateway",
+                "image": "nginx:stable-alpine",
+                "command": [
+                  "nginx",
+                  "-g",
+                  "daemon off;"
+                ],
+                "ports": [
+                  {
+                    "containerPort": 8080
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {
+                  "requests": {
+                    "cpu": "25m",
+                    "memory": "32Mi"
+                  },
+                  "limits": {
+                    "memory": "128Mi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "media",
+                    "mountPath": "/srv/media",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "nginx",
+                    "mountPath": "/etc/nginx/nginx.conf",
+                    "subPath": "nginx.conf",
+                    "readOnly": true
+                  }
+                ],
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/health/live/",
+                    "port": 8080,
+                    "httpHeaders": [
+                      {
+                        "name": "Host",
+                        "value": "hub.gabomazone.com"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "media",
+                "persistentVolumeClaim": {
+                  "claimName": "hub-media"
+                }
+              },
+              {
+                "name": "nginx",
+                "configMap": {
+                  "name": "hub-nginx"
+                }
+              }
+            ],
+            "securityContext": {
+              "runAsNonRoot": true,
+              "runAsUser": 10001,
+              "runAsGroup": 10001,
+              "fsGroup": 10001,
+              "seccompProfile": {
+                "type": "RuntimeDefault"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "hub-web",
+        "namespace": "gaboma-hub"
+      },
+      "spec": {
+        "selector": {
+          "app": "hub-web"
+        },
+        "ports": [
+          {
+            "port": 8080,
+            "targetPort": 8080
+          }
+        ]
+      }
+    }
+  ]
+}

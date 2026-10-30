@@ -1,0 +1,22 @@
+{% load hub_tags static %}
+<section class="hero-showcase discovery-section" aria-label="En vitrine">
+  <div class="app-rail showcase-track" id="hero-showcase" tabindex="0" role="region" aria-label="En vitrine : éléments à faire défiler">
+  {% for ad in showcase_ads %}
+    <article class="showcase-ad">
+      {% if ad.target_url %}<a href="{{ ad.target_url }}" target="_blank" rel="noopener noreferrer" aria-label="{{ ad.title }} — nouvel onglet">{% endif %}
+      <img src="{{ ad.image.url }}" alt="{{ ad.title }}" {% if forloop.first %}fetchpriority="high"{% else %}loading="lazy"{% endif %} decoding="async">
+      {% if ad.target_url %}</a>{% endif %}
+      <div class="showcase-ad-caption"><div><span>PUBLICITÉ{% if ad.sponsor %} · {{ ad.sponsor }}{% endif %}</span><h2>{{ ad.title }}</h2></div>{% if ad.target_url %}<a href="{{ ad.target_url }}" target="_blank" rel="noopener noreferrer" aria-label="Découvrir {{ ad.title }} — nouvel onglet">{% ui_icon 'external' %}</a>{% endif %}</div>
+    </article>
+  {% empty %}
+    {% for app in spotlight %}
+    <a class="editorial-feature" href="{{ app.get_absolute_url }}" aria-label="À découvrir : {{ app.name }}">
+      {% if app.banner %}<img class="editorial-feature-image" src="{{ app.banner.url }}" alt="" {% if forloop.first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}>{% else %}<img class="editorial-feature-art" src="{% static 'hub/images/connections.svg' %}" alt="">{% endif %}
+      <div class="feature-topline"><span>EN VITRINE</span><span>GABOMA / HUB</span></div>
+      <div class="feature-caption"><span class="feature-category">{{ app.category.name }}</span><h2>{{ app.name }}</h2><p>{{ app.description }}</p><div class="feature-bottom">{% include 'hub/_icon.html' with app=app %}<span>Découvrir le projet</span><span class="feature-open">{% ui_icon 'external' %}</span></div></div>
+    </a>
+    {% empty %}<div class="editorial-feature editorial-feature-empty"><p>La prochaine découverte commence avec vous.</p><a href="{% url 'hub:submit' %}">Présenter mon projet {% ui_icon 'arrow' %}</a></div>{% endfor %}
+  {% endfor %}
+  </div>
+  <div class="showcase-navigation"><span>En vitrine <small data-slide-counter></small></span><div class="rail-controls" data-carousel-controls hidden><button type="button" data-direction="-1" aria-controls="hero-showcase" aria-label="Vitrine précédente">{% ui_icon 'chevron-left' %}</button><button type="button" data-direction="1" aria-controls="hero-showcase" aria-label="Vitrine suivante">{% ui_icon 'chevron-right' %}</button></div></div>
+</section>
