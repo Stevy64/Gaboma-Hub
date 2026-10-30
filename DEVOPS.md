@@ -30,6 +30,8 @@ Pour remplir le catalogue de référence : `docker compose -f compose.dev.yaml e
 
 ## Production sur VPS
 
+Le cluster k3s déjà utilisé par Wayizé est décrit dans [docs/ovh-cluster.md](docs/ovh-cluster.md). Le reste de cette section est le chemin Docker Compose sur une machine vide.
+
 1. Installer Docker/Compose et copier le projet, ou le cloner dans un dépôt dédié.
 2. Copier `.env.production.example` vers `.env.production`. Générer deux secrets distincts avec `python -c "import secrets; print(secrets.token_hex(32))"` : `SECRET_KEY` et `POSTGRES_PASSWORD` (hex pour compatibilité URL).
 3. Renseigner le vrai domaine et l'adresse ACME. Pointer le DNS vers le VPS et autoriser les ports 80/443. Ces prérequis ne sont pas configurés par le projet.

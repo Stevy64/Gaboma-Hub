@@ -374,7 +374,9 @@ Le menu **Suivi des soumissions** ouvre les dossiers filtrés par étape : paiem
 
 La navigation mobile est fixe en bas de l’écran, les actions sont tactiles et le compte est accessible dans un menu compact.
 
-Pour `hub.gabomazone.com`, utiliser [le guide K3s](deploy/k8s/README.md), les manifests isolés et le workflow GitHub Actions manuel `deploy-k3s.yml`. Le profil Compose existant reste disponible pour le développement. Aucun déploiement distant n’a encore été effectué.
+Pour `hub.gabomazone.com` sur le VPS qui fait déjà tourner Wayizé, suivre [docs/ovh-cluster.md](docs/ovh-cluster.md) : namespace `hub`, Postgres partagé, deux façons de construire l'image (GitHub Actions ou `docker build` sur le VPS).
+
+Le [guide K3s isolé](deploy/k8s/README.md) et les manifests JSON restent une autre préparation, avec un Postgres à part. Le profil Compose reste disponible. Aucun déploiement distant n'a encore été effectué.
 
 ### Validation manuelle et gestion des volumes
 Dans Suivi des soumissions → Examiner le dossier → Paiements, ouvrir **Valider le paiement manuellement**. Renseigner la référence du reçu, le montant exact et le motif du contrôle, puis cocher la confirmation de réception. Cette option fonctionne aussi sans tentative en ligne. Elle ne réalise aucun transfert bancaire ; elle enregistre un encaissement constaté. La publication reste une décision distincte. Les références manuelles sont uniques et les actions historisées. Recherche étendue, catégorie, tri ancien/récent/nom, pagination 12/24/48 et retour à la liste filtrée facilitent le traitement.

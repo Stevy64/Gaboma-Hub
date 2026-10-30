@@ -1,6 +1,10 @@
 # Gaboma Hub sur le cluster K3s OVHcloud
 
-Cible : **https://hub.gabomazone.com**. Préparation uniquement : aucun accès au VPS,
+Cette préparation isole Gaboma Hub : son propre Postgres, ses manifests JSON, un déploiement lancé depuis un poste qui a `kubectl`. Elle ne réutilise pas le Postgres du namespace `donnees`.
+
+Pour le VPS qui fait déjà tourner Wayizé, suivre plutôt [docs/ovh-cluster.md](../../docs/ovh-cluster.md). Le namespace y est `hub`, l'image se construit soit par GitHub Actions soit sur le VPS (`hub-deploy` ou `hub-deploy local`), et les manifests sont dans `deploy/k8s/cluster/`.
+
+Cible de cette préparation isolée : **https://hub.gabomazone.com**. Préparation uniquement : aucun accès au VPS,
 aucune modification DNS ni installation dans le cluster n'ont été effectués.
 
 ## Architecture et choix
