@@ -168,6 +168,14 @@ def catalogue(request):
         "catalogue_next": catalogue_url(request, next_number, fragment=True) if next_number else ""})
 
 @require_GET
+def terms(request):
+    return render(request, "hub/terms.html")
+
+@require_GET
+def faq(request):
+    return render(request, "hub/faq.html")
+
+@require_GET
 def detail(request, slug):
     app = get_object_or_404(Application.objects.select_related("category"), slug=slug, status=Application.Status.PUBLISHED)
     return render(request, "hub/detail.html", detail_context(request, app))

@@ -6,6 +6,7 @@ from .images import ApplicationImagesMixin
 
 class SignupForm(UserCreationForm):
     email = forms.EmailField(label="Adresse e-mail")
+    accept_terms = forms.BooleanField(label="J'accepte les conditions générales d'utilisation.")
     class Meta:
         model = User
         fields = ["username", "email", "password1", "password2"]
@@ -18,7 +19,7 @@ class SignupForm(UserCreationForm):
 class ApplicationForm(ApplicationImagesMixin, forms.ModelForm):
     logo = ApplicationImagesMixin.logo
     banner = ApplicationImagesMixin.banner
-    confirmation = forms.BooleanField(label="Je confirme que ce lien est public et que la fiche décrit fidèlement l'application.")
+    confirmation = forms.BooleanField(label="Je suis autorisé à présenter cette application, la fiche est exacte, et j'accepte les conditions d'utilisation.")
     class Meta:
         model = Application
         fields = ["name", "category", "creator_name", "creator_city", "description", "about", "website_url", "logo", "banner", "color"]

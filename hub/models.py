@@ -7,7 +7,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 from .validators import validate_application_url
-from .images import application_image_path, editorial_image_path
+from .images import application_image_path, editorial_image_path, native_package_path
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 class HubAppearance(models.Model):
@@ -49,6 +49,8 @@ class HubAppearance(models.Model):
     tiktok_url = models.URLField("TikTok", max_length=500, blank=True, default="", validators=[validate_application_url])
     linkedin_url = models.URLField("LinkedIn", max_length=500, blank=True, default="", validators=[validate_application_url])
     x_url = models.URLField("X", max_length=500, blank=True, default="", validators=[validate_application_url])
+    android_app = models.FileField("application Android", upload_to=native_package_path, blank=True, help_text="Fichier .apk, 80 Mo maximum. Proposé sur les téléphones Android. Sans fichier, le Hub s'installe comme application web.")
+    ios_app = models.FileField("application Apple", upload_to=native_package_path, blank=True, help_text="Fichier .ipa, 80 Mo maximum. Proposé sur iPhone. Sans fichier, le Hub explique l'ajout à l'écran d'accueil.")
     showcase_enabled = models.BooleanField("afficher la vitrine", default=True)
     discovery_enabled = models.BooleanField("afficher les carrousels de découverte", default=True)
     updated_at = models.DateTimeField("mise à jour", auto_now=True)

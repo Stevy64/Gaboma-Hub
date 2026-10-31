@@ -12,6 +12,12 @@ def application_image_path(instance, filename):
 def editorial_image_path(instance, filename):
     return f"editorial/{uuid.uuid4().hex}.webp"
 
+def native_package_path(instance, filename):
+    suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+    if suffix not in {"apk", "ipa"}:
+        suffix = "bin"
+    return f"native/{uuid.uuid4().hex}.{suffix}"
+
 class PublicImageField(forms.ImageField):
     def to_python(self, data):
         if not data or not hasattr(data, "read"):

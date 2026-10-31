@@ -1,13 +1,12 @@
 import hashlib
 import json
 from django.conf import settings
-from django.http import JsonResponse, HttpResponse
-from django.shortcuts import render
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.templatetags.static import static
 from django.views.decorators.http import require_GET
 from django.views.decorators.cache import never_cache
 
-ASSETS = ['pwa.css', 'pwa.js', 'theme-init.js', 'theme.js', 'theme.css', 'icon-192.png', 'icon-512.png', 'icon-maskable.png']
+ASSETS = ['pwa.css', 'pwa.js', 'theme-init.js', 'theme.js', 'theme.css', 'hub.js', 'style.css', 'icon-192.png', 'icon-512.png', 'icon-maskable.png']
 
 @require_GET
 @never_cache
@@ -38,5 +37,17 @@ def manifest(request):
         content_type='application/manifest+json')
 
 @require_GET
-def install(request):
-    return render(request, 'pwa/install.html')
+def native(request, platform):
+    from .models import HubAppearance
+    if platform not in {"android", "ios"}:
+        raise Http404
+    appearance = HubAppearance.objects.first()
+    field = None
+    if appearance is not None:
+        field = appearance.android_app if platform == "android" else appearance.ios_app
+    if not field:
+        raise Http404
+    filename = "GabomaHub.apk" if platform == "android" else "GabomaHub.ipa"
+    content_type = "application/vnd.android.package-archive" if platform == "android" else "application/octet-stream"
+    response = FileResponse(field.open("rb"), as_attachment=True, filename=filename, content_type=content_type)
+    return response

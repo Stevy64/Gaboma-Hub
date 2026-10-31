@@ -153,7 +153,7 @@ document.querySelectorAll('.hub-form textarea[maxlength]').forEach(input => {
   window.addEventListener('pageshow', reset);
   document.addEventListener('click', event => {
     const link = event.target.closest('a[href]');
-    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target || link.hasAttribute('download')) return;
+    if (!link || link.closest('[data-legal]') || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target || link.hasAttribute('download')) return;
     const url = new URL(link.href, location.href);
     if (url.origin !== location.origin || !['http:', 'https:'].includes(url.protocol)) return;
     if (url.pathname === location.pathname && url.search === location.search) return;
@@ -326,6 +326,56 @@ document.querySelectorAll('.hub-form textarea[maxlength]').forEach(input => {
     document.body.classList.add('hub-sheet-open');
     sheet.querySelector('.hub-sheet-x').focus();
   };
+  document.addEventListener('click', (event) => {
+    const legal = event.target.closest('[data-legal]');
+    if (legal) {
+      event.preventDefault();
+      event.stopPropagation();
+      const source = document.querySelector(legal.dataset.legal === 'faq' ? '#hub-legal-faq' : '#hub-legal-terms');
+      if (!source) { location.href = legal.href; return; }
+      const node = source.cloneNode(true);
+      node.hidden = false;
+      openSheet({
+        kickerText: 'Gaboma Hub',
+        titleText: legal.dataset.legal === 'faq' ? 'Questions fréquentes' : 'Conditions générales d’utilisation',
+        node,
+      });
+      return;
+    }
+    const install = event.target.closest('[data-install-hub]');
+    if (!install) return;
+    event.preventDefault();
+    const agent = navigator.userAgent || '';
+    const platform = /android/i.test(agent) ? 'android' : /iphone|ipad|ipod/i.test(agent) ? 'ios' : 'desktop';
+    const native = platform === 'android' ? install.dataset.android : platform === 'ios' ? install.dataset.ios : '';
+    if (!native && window.hubInstallPrompt) {
+      const prompt = window.hubInstallPrompt;
+      window.hubInstallPrompt = null;
+      prompt.prompt();
+      return;
+    }
+    const node = document.createElement('div');
+    node.className = 'install-sheet';
+    const text = document.createElement('p');
+    if (native) {
+      text.textContent = platform === 'android'
+        ? 'L’application Android de Gaboma Hub est disponible. Vous pouvez l’installer sur ce téléphone.'
+        : 'L’application Apple de Gaboma Hub est disponible. Vous pouvez la télécharger sur cet appareil.';
+      const link = document.createElement('a');
+      link.className = 'hub-sheet-go';
+      link.href = native;
+      link.textContent = platform === 'android' ? 'Télécharger l’application Android' : 'Télécharger l’application Apple';
+      node.append(text, link);
+    } else if (platform === 'ios') {
+      text.textContent = 'Sur iPhone, ouvrez le menu Partager du navigateur, puis choisissez « Sur l’écran d’accueil ».';
+      node.append(text);
+    } else {
+      text.textContent = 'Aucune application native n’est proposée pour cet appareil. Utilisez le menu du navigateur, puis « Installer l’application » ou « Ajouter à l’écran d’accueil ».';
+      node.append(text);
+    }
+    openSheet({ kickerText: 'Installation', titleText: 'Installer Gaboma Hub', node });
+  }, true);
+
   const panel = document.querySelector('.filter-panel');
   const options = panel?.querySelector('.filter-options');
   panel?.querySelector('summary')?.addEventListener('click', (event) => {
@@ -471,6 +521,31 @@ document.querySelectorAll('.hub-form textarea[maxlength]').forEach(input => {
   }, {passive: true});
   window.addEventListener('pageshow', update);
   update();
+})();
+
+// La barre basse se retire pendant la descente, puis revient en remontant ou après une pause.
+(() => {
+  const nav = document.querySelector('.mobile-nav');
+  if (!nav) return;
+  let last = window.scrollY;
+  let queued = false;
+  let idle = 0;
+  const update = () => {
+    const y = Math.max(0, window.scrollY);
+    const delta = y - last;
+    const nearTop = y < 48;
+    const nearBottom = window.innerHeight + y > document.documentElement.scrollHeight - 80;
+    const focused = nav.contains(document.activeElement);
+    if (nearTop || nearBottom || focused || delta < -10) nav.classList.remove('is-away');
+    else if (delta > 12 && y > 72) nav.classList.add('is-away');
+    last = y;
+    queued = false;
+    clearTimeout(idle);
+    if (nav.classList.contains('is-away')) idle = setTimeout(() => nav.classList.remove('is-away'), 700);
+  };
+  window.addEventListener('scroll', () => {
+    if (!queued) { queued = true; requestAnimationFrame(update); }
+  }, { passive: true });
 })();
 
 // Sélecteurs accessibles : le select Django reste la source du formulaire.

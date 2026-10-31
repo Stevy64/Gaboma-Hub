@@ -67,6 +67,31 @@
    } catch { /* navigation reste utilisable sans mémoire de défilement */ }
   }
  }
+ if (sidebar) {
+  const railButton = sidebar.querySelector('.console-rail-toggle');
+  const desktop = matchMedia('(min-width:1001px)');
+  const railKey = 'hub-console-rail';
+  sidebar.querySelectorAll('.console-nav-link').forEach((link) => {
+   const label = link.querySelector('span:not(.nav-ico):not(.nav-count)');
+   if (label && !link.title) link.title = label.textContent.trim();
+  });
+  function railOn() {
+   try { return localStorage.getItem(railKey) === '1'; } catch { return false; }
+  }
+  function paintRail() {
+   const on = railOn() && desktop.matches;
+   document.documentElement.classList.toggle('console-rail', on);
+   if (!railButton) return;
+   railButton.setAttribute('aria-pressed', String(on));
+   railButton.setAttribute('aria-label', on ? 'Déplier le menu' : 'Réduire le menu');
+  }
+  paintRail();
+  railButton?.addEventListener('click', () => {
+   try { localStorage.setItem(railKey, railOn() ? '0' : '1'); } catch { /* le menu se replie quand même pour cette visite */ }
+   paintRail();
+  });
+  desktop.addEventListener('change', paintRail);
+ }
 
  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
  document.querySelectorAll('[data-count]').forEach((el) => {
@@ -209,9 +234,11 @@
  let lastFocus = null;
  let closing = false;
 
+ let epoch = 0;
  function finishClose() {
   if (!closing) return;
   closing = false;
+  epoch += 1;
   sheet.hidden = true;
   sheet.classList.remove('is-closing');
   card.style.transform = '';
@@ -270,6 +297,111 @@
   sheet.hidden = false;
   document.body.classList.add('console-sheet-open');
   sheet.querySelector('.console-sheet-x').focus();
+ }
+
+ document.addEventListener('click', (event) => {
+  const link = event.target.closest('a.add-related');
+  if (!link || link.closest('#console-sheet')) return;
+  const href = link.getAttribute('href') || '';
+  let endpoint = '';
+  let titleText = 'Ajouter';
+  let kickerText = 'Ajout rapide';
+  if (href.includes('/hub/category/add/')) {
+   endpoint = '/admin/hub/application/rapide/categorie/';
+   titleText = 'Nouvelle catégorie';
+   kickerText = 'Catégorie';
+  } else if (href.includes('/auth/user/add/')) {
+   endpoint = '/admin/hub/application/rapide/deposant/';
+   titleText = 'Nouveau déposant';
+   kickerText = 'Déposant';
+  } else return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  openQuick(link, endpoint, kickerText, titleText);
+ }, true);
+
+ function showFieldErrors(form, errors) {
+  form.querySelectorAll('.errorlist').forEach((node) => node.remove());
+  Object.entries(errors || {}).forEach(([name, messages]) => {
+   const list = document.createElement('ul');
+   list.className = 'errorlist';
+   (Array.isArray(messages) ? messages : [messages]).forEach((message) => {
+    const item = document.createElement('li');
+    item.textContent = typeof message === 'string' ? message : (message.message || '');
+    list.append(item);
+   });
+   const field = form.querySelector(`[name="${name}"]`);
+   (field ? field.closest('p') || field : form).before(list);
+  });
+ }
+
+ async function openQuick(link, endpoint, kickerText, titleText) {
+  const hold = document.createElement('p');
+  hold.className = 'console-related-status';
+  hold.textContent = 'Chargement…';
+  openSheet({ kickerText, titleText, node: hold });
+  const stamp = epoch;
+  let response;
+  try {
+   response = await fetch(endpoint, { credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' } });
+  } catch {
+   if (stamp !== epoch) return;
+   hold.textContent = 'Le formulaire n’a pas pu s’ouvrir. Réessayez.';
+   return;
+  }
+  if (stamp !== epoch) return;
+  if (!response.ok) {
+   hold.textContent = 'Ce formulaire n’est pas disponible.';
+   return;
+  }
+  const html = await response.text();
+  if (stamp !== epoch) return;
+  const form = new DOMParser().parseFromString(html, 'text/html').querySelector('form');
+  if (!form) {
+   hold.textContent = 'Formulaire introuvable.';
+   return;
+  }
+  openSheet({ kickerText, titleText, node: form });
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'console-sheet-go';
+  save.textContent = 'Enregistrer';
+  actions.append(save);
+  save.addEventListener('click', async () => {
+   save.disabled = true;
+   let payload;
+   try {
+    const posted = await fetch(endpoint, {
+     method: 'POST',
+     body: new FormData(form),
+     credentials: 'same-origin',
+     headers: { 'X-Requested-With': 'fetch' },
+    });
+    payload = await posted.json();
+   } catch {
+    save.disabled = false;
+    showFieldErrors(form, { __all__: ['L’enregistrement n’a pas abouti. Réessayez.'] });
+    return;
+   }
+   if (!payload.ok) {
+    showFieldErrors(form, payload.errors || {});
+    save.disabled = false;
+    return;
+   }
+   const select = link.closest('.related-widget-wrapper')?.querySelector('select');
+   if (select) {
+    const value = String(payload.value);
+    let option = [...select.options].find((item) => item.value === value);
+    if (!option) {
+     option = new Option(payload.label, value);
+     select.add(option);
+    }
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+   }
+   closeSheet();
+  });
  }
 
  sheet.querySelectorAll('[data-sheet-close]').forEach((button) => button.addEventListener('click', closeSheet));

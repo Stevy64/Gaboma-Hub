@@ -6,7 +6,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Exists, OuterRef
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseForbidden, HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
@@ -28,9 +28,32 @@ class AppearanceForm(forms.ModelForm):
         help_text="JPG, PNG ou WebP · 5 Mo maximum. Format carré conseillé : 512 × 512. Il remplace le symbole en haut du site.")
     hero_background = PublicImageField(label="Image de fond du Hero", required=False,
         help_text="JPG, PNG ou WebP · 5 Mo maximum. Format paysage conseillé : 1920 × 1080. Utilisée seulement s'il n'y a aucune image de carrousel.")
+    android_app = forms.FileField(label="Application Android", required=False,
+        widget=forms.ClearableFileInput(attrs={"accept": ".apk"}),
+        help_text="Fichier .apk · 80 Mo maximum. Sur Android, ce fichier est proposé à la place de l'application web.")
+    ios_app = forms.FileField(label="Application Apple", required=False,
+        widget=forms.ClearableFileInput(attrs={"accept": ".ipa"}),
+        help_text="Fichier .ipa · 80 Mo maximum. Sur iPhone, ce fichier est proposé à la place de l'ajout à l'écran d'accueil.")
     class Meta:
         model = HubAppearance
         fields = "__all__"
+
+    def _native_file(self, upload, extension, label):
+        if not upload:
+            return upload
+        name = (getattr(upload, "name", "") or "").lower()
+        if not name.endswith(extension):
+            raise forms.ValidationError(f"Déposez un fichier {label} ({extension}).")
+        size = getattr(upload, "size", 0) or 0
+        if size > 80 * 1024 * 1024:
+            raise forms.ValidationError("Le fichier doit peser au maximum 80 Mo.")
+        return upload
+
+    def clean_android_app(self):
+        return self._native_file(self.cleaned_data.get("android_app"), ".apk", "Android")
+
+    def clean_ios_app(self):
+        return self._native_file(self.cleaned_data.get("ios_app"), ".ipa", "Apple")
 
 class HeroSlideForm(forms.ModelForm):
     image = PublicImageField(label="Image", help_text="JPG, PNG ou WebP · 5 Mo maximum. Format paysage conseillé : 1600 × 900. Les images défilent dans le hero.")
@@ -65,6 +88,7 @@ class AppearanceAdmin(admin.ModelAdmin):
         ("Répertoire", {"fields": [("catalogue_kicker", "catalogue_title"), "catalogue_note", ("rail_new_title", "rail_new_subtitle"), ("rail_rated_title", "rail_rated_subtitle"), ("rail_follow_title", "rail_follow_subtitle"), ("showcase_enabled", "discovery_enabled")], "description": "Les cartes de filtre se gèrent dans Filtres d'accueil. Les carrousels se masquent sans effacer leurs titres."}),
         ("Créateurs", {"fields": [("creator_kicker", "submission_fee"), ("creator_title", "creator_emphasis"), "creator_text"], "description": "L'abonnement dure un an à compter de la confirmation du paiement. Le tarif s'applique aux nouvelles souscriptions et aux renouvellements. Le même montant se règle aussi depuis Paiements mobiles."}),
         ("Contact et pied de page", {"fields": [("footer_lead", "footer_colophon"), ("support_email", "support_phone", "whatsapp_number"), ("facebook_url", "instagram_url"), ("tiktok_url", "linkedin_url", "x_url")], "description": "Un lien n'apparaît dans le pied de page que s'il est renseigné."}),
+        ("Applications mobiles", {"fields": ["android_app", "ios_app"], "description": "Déposez l'application Android (.apk) et l'application Apple (.ipa) si elles existent. Sans fichier pour le téléphone du visiteur, un clic sur Installer lance l'application web."}),
         ("Visuels", {"fields": ["hero_background", "hero_background_enabled"], "description": "Ajoutez les images du carrousel dans le bloc Images du hero, sous ce formulaire. Sans image active, le fond unique ci-dessus est affiché."}),
         ("Suivi", {"fields": ["updated_at"]}),
     ]
@@ -153,6 +177,23 @@ class CatalogueFilterAdmin(admin.ModelAdmin):
     fieldsets = [("Carte de l'accueil", {"fields": [("label", "category"), ("icon", "tone"), ("order", "is_active")],
         "description": "Un clic sur la carte ouvre le répertoire filtré sur la catégorie choisie. Décochez la carte pour la retirer sans supprimer la catégorie."})]
 
+class PaymentCoverageFilter(admin.SimpleListFilter):
+    title = "abonnement"
+    parameter_name = "abonnement"
+
+    def lookups(self, request, model_admin):
+        return (("jour", "À jour"), ("regler", "À régler"), ("offert", "Offert"))
+
+    def queryset(self, request, queryset):
+        if self.value() == "offert":
+            return queryset.filter(is_admin_added=True)
+        if self.value() == "jour":
+            return queryset.filter(is_admin_added=False, payment_ok=True)
+        if self.value() == "regler":
+            return queryset.filter(is_admin_added=False, payment_ok=False)
+        return queryset
+
+
 class PageSizeChangeList(ChangeList):
     """Honours ?per_page=25|50|100 without treating it as a model filter."""
 
@@ -166,6 +207,75 @@ class PageSizeChangeList(ChangeList):
         if raw in {"25", "50", "100"}:
             self.list_per_page = int(raw)
         super().get_results(request)
+
+
+class QuickCategoryForm(forms.Form):
+    name = forms.CharField(label="Nom", max_length=60)
+
+
+class QuickDepositorForm(forms.Form):
+    username = forms.CharField(label="Identifiant", max_length=150)
+    first_name = forms.CharField(label="Prénom", max_length=150, required=False)
+    last_name = forms.CharField(label="Nom", max_length=150, required=False)
+    email = forms.EmailField(label="E-mail", required=False)
+    password = forms.CharField(label="Mot de passe", widget=forms.PasswordInput, help_text="Au moins 8 caractères.")
+
+
+def quick_related(request, kind):
+    """Small add form for a category or a depositor, rendered inside the admin sheet."""
+    from django.contrib.auth.password_validation import validate_password
+    from django.shortcuts import render
+    from django.utils.text import slugify
+
+    if kind == "categorie":
+        if not request.user.has_perm("hub.add_category"):
+            return HttpResponseForbidden("Permission refusée.")
+        form = QuickCategoryForm(request.POST or None)
+        title, kicker = "Nouvelle catégorie", "Catégorie"
+    elif kind == "deposant":
+        if not request.user.has_perm("auth.add_user"):
+            return HttpResponseForbidden("Permission refusée.")
+        form = QuickDepositorForm(request.POST or None)
+        title, kicker = "Nouveau déposant", "Déposant"
+    else:
+        return HttpResponseForbidden("Formulaire inconnu.")
+
+    if request.method == "POST" and form.is_valid():
+        if kind == "categorie":
+            name = form.cleaned_data["name"].strip()
+            if Category.objects.filter(name__iexact=name).exists():
+                form.add_error("name", "Cette catégorie existe déjà.")
+            else:
+                base = (slugify(name) or "categorie")[:50]
+                slug, n = base, 2
+                while Category.objects.filter(slug=slug).exists():
+                    slug = f"{base[:46]}-{n}"
+                    n += 1
+                category = Category.objects.create(name=name, slug=slug)
+                return JsonResponse({"ok": True, "value": str(category.pk), "label": category.name})
+        else:
+            User = get_user_model()
+            username = form.cleaned_data["username"].strip()
+            if User.objects.filter(username__iexact=username).exists():
+                form.add_error("username", "Cet identifiant est déjà utilisé.")
+            else:
+                try:
+                    validate_password(form.cleaned_data["password"], User(username=username, email=form.cleaned_data["email"]))
+                except ValidationError as exc:
+                    form.add_error("password", exc)
+                else:
+                    user = User.objects.create_user(
+                        username=username,
+                        email=form.cleaned_data["email"],
+                        password=form.cleaned_data["password"],
+                        first_name=form.cleaned_data["first_name"],
+                        last_name=form.cleaned_data["last_name"],
+                    )
+                    return JsonResponse({"ok": True, "value": str(user.pk), "label": user.get_username()})
+    if request.method == "POST" and request.headers.get("X-Requested-With") == "fetch":
+        return JsonResponse({"ok": False, "errors": {key: list(value) for key, value in form.errors.items()}}, status=400)
+
+    return render(request, "admin/hub/quick_related.html", {"form": form, "title": title, "kicker": kicker})
 
 
 @admin.register(Application)
@@ -191,12 +301,45 @@ class ApplicationAdmin(admin.ModelAdmin):
         from functools import partial
         return [
             path('notifications/', self.admin_site.admin_view(partial(publication_notices, self)), name='hub_application_notices'),
+            path('rapide/categorie/', self.admin_site.admin_view(partial(quick_related, kind='categorie')), name='hub_application_quick_category'),
+            path('rapide/deposant/', self.admin_site.admin_view(partial(quick_related, kind='deposant')), name='hub_application_quick_depositor'),
             path('suivi/', self.admin_site.admin_view(partial(workflow, self)), name='hub_application_workflow'),
             path('suivi/<int:object_id>/', self.admin_site.admin_view(partial(workflow, self)), name='hub_application_workflow_detail'),
         ] + super().get_urls()
     form = AdminApplicationForm
     list_display = ["name", "category", "status_badge", "creator_display", "funding_badge", "created_short"]
-    list_filter = ["status", "is_admin_added", "category"]
+    list_filter = ["status", "is_admin_added", "category", PaymentCoverageFilter]
+
+    def changelist_view(self, request, extra_context=None):
+        context = extra_context or {}
+        context.update(self.directory_context(request))
+        return super().changelist_view(request, extra_context=context)
+
+    def directory_context(self, request):
+        params = request.GET.copy()
+        params.pop("p", None)
+
+        def href(**updates):
+            query = params.copy()
+            for key, value in updates.items():
+                if value is None:
+                    query.pop(key, None)
+                else:
+                    query[key] = value
+            encoded = query.urlencode()
+            return f"?{encoded}" if encoded else "?"
+
+        current = params.get("status__exact", "")
+        counts = {row["status"]: row["n"] for row in Application.objects.values("status").annotate(n=Count("pk"))}
+        chips = [{"label": "Toutes", "count": sum(counts.values()), "href": href(status__exact=None), "current": not current}]
+        for value, label in Application.Status.choices:
+            chips.append({"label": label, "count": counts.get(value, 0), "href": href(status__exact=value), "current": current == value})
+        return {
+            "directory_chips": chips,
+            "directory_categories": Category.objects.order_by("order", "name"),
+            "directory_category": params.get("category__id__exact", ""),
+            "directory_plan": params.get("abonnement", ""),
+        }
     search_fields = ["name", "website_url", "submitted_by__username", "creator_name"]
     prepopulated_fields = {"slug": ("name",)}
     readonly_fields = ["public_id", "is_admin_added", "fee_amount", "reviewed_by", "reviewed_at", "created_at", "updated_at", "payment_confirmed"]

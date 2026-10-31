@@ -14,7 +14,7 @@
     <script src="{% url 'admin:jsi18n' %}"></script>
   {% endif %}
   {{ media.css }}
-  <link rel="stylesheet" href="{% static 'hub/admin-console.css' %}?v=20261031-pay10">
+  <link rel="stylesheet" href="{% static 'hub/admin-console.css' %}?v=20261031-dir2">
 {% endblock %}
 
 {% block extrahead %}
@@ -47,7 +47,7 @@
           <span class="console-pill is-blue">{{ cl.result_count }}</span>
         </div>
         <p class="console-lead">
-          {% if cl.opts.model_name == 'application' %}Gérez le répertoire par pages de 25, 50 ou 100. Sélectionnez une page, ou toutes les fiches du filtre, puis publiez, renvoyez ou archivez.
+          {% if cl.opts.model_name == 'application' %}Parcourez le répertoire comme une liste : filtrez par état, catégorie et abonnement, puis publiez, renvoyez ou archivez.
           {% elif cl.opts.model_name == 'payment' %}Suivez les encaissements Paiement Mobile, contrôlez les références et ouvrez chaque dossier.
           {% elif cl.opts.model_name == 'paymentevent' %}Journal de sécurité des notifications webhooks reçues et vérifiées par signature HMAC.
           {% elif cl.opts.model_name == 'review' %}Modérez les notes et avis publiés par la communauté sur les applications.
@@ -97,6 +97,39 @@
         </p>
         {{ cl.formset.non_form_errors }}
     {% endif %}
+    {% if cl.opts.model_name == 'application' %}
+    <div class="console-directory">
+      <nav class="console-chip-row" aria-label="Filtrer par état">
+        {% for chip in directory_chips %}
+        <a href="{{ chip.href }}" {% if chip.current %}aria-current="page"{% endif %}>{{ chip.label }} <span>{{ chip.count }}</span></a>
+        {% endfor %}
+      </nav>
+      <form method="get" class="console-directory-tools">
+        {% for key, value in request.GET.items %}{% if key != 'p' and key != 'per_page' and key != 'category__id__exact' and key != 'abonnement' and key != 'e' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
+        <label>Catégorie
+          <select name="category__id__exact" onchange="if(!this.value){this.removeAttribute('name')} this.form.requestSubmit()">
+            <option value="">Toutes</option>
+            {% for cat in directory_categories %}<option value="{{ cat.pk }}" {% if directory_category == cat.pk|stringformat:'s' %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Abonnement
+          <select name="abonnement" onchange="if(!this.value){this.removeAttribute('name')} this.form.requestSubmit()">
+            <option value="">Tous</option>
+            <option value="jour" {% if directory_plan == 'jour' %}selected{% endif %}>À jour</option>
+            <option value="regler" {% if directory_plan == 'regler' %}selected{% endif %}>À régler</option>
+            <option value="offert" {% if directory_plan == 'offert' %}selected{% endif %}>Offert</option>
+          </select>
+        </label>
+        <label>Par page
+          <select name="per_page" onchange="this.form.requestSubmit()">
+            <option value="25" {% if cl.list_per_page == 25 %}selected{% endif %}>25</option>
+            <option value="50" {% if cl.list_per_page == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if cl.list_per_page == 100 %}selected{% endif %}>100</option>
+          </select>
+        </label>
+      </form>
+    </div>
+    {% endif %}
     <div class="module{% if cl.has_filters %} filtered{% endif %}" id="changelist">
       <div class="changelist-form-container">
         {% block search %}{% search_form cl %}{% endblock %}
@@ -114,17 +147,6 @@
         {% endblock %}
         {% block pagination %}{% pagination cl %}{% endblock %}
         </form>
-        {% if cl.opts.model_name == 'application' %}
-        <form method="get" class="console-page-size">
-          {% for key, value in request.GET.items %}{% if key != 'p' and key != 'per_page' and key != 'e' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
-          <label for="per-page">Par page</label>
-          <select id="per-page" name="per_page" onchange="this.form.requestSubmit()">
-            <option value="25" {% if cl.list_per_page == 25 %}selected{% endif %}>25</option>
-            <option value="50" {% if cl.list_per_page == 50 %}selected{% endif %}>50</option>
-            <option value="100" {% if cl.list_per_page == 100 %}selected{% endif %}>100</option>
-          </select>
-        </form>
-        {% endif %}
       </div>
       {% block filters %}
         {% if cl.has_filters %}

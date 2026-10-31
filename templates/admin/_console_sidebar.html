@@ -1,6 +1,6 @@
 {% load hub_tags %}
 <aside id="console-sidebar" class="hub-admin-sidebar" aria-label="Menu de gestion">
-<div class="console-sidebar-heading"><span>ESPACE DE GESTION</span><button type="button" class="console-menu-close" aria-label="Fermer le menu">×</button></div>
+<div class="console-sidebar-heading"><span>ESPACE DE GESTION</span><button type="button" class="console-rail-toggle" aria-pressed="false" aria-label="Réduire le menu">⟨</button><button type="button" class="console-menu-close" aria-label="Fermer le menu">×</button></div>
 <nav aria-label="Gestion du Hub">
 <a class="console-nav-link" href="{% url 'admin:index' %}"><span class="nav-ico">{% ui_icon 'grid' %}</span><span>Vue d’ensemble</span></a>
 {% if perms.hub.view_application %}<a class="console-nav-link" href="{% url 'admin:hub_application_notices' %}">{% unread_notice_count as notice_count %}<span class="nav-ico">{% ui_icon 'bell' %}</span><span>Nouvelles publications</span>{% if notice_count %}<span class="nav-count">{{ notice_count }}</span>{% endif %}</a><a class="console-nav-link" href="{% url 'admin:hub_application_workflow' %}"><span class="nav-ico">{% ui_icon 'check' %}</span><span>Soumissions à traiter</span></a>{% endif %}

@@ -353,7 +353,7 @@ class CatalogueTests(HubTestCase):
         for url in ["/inscription/", "/compte/login/", "/compte/password_reset/"]:
             self.assertEqual(self.client.get(url).status_code, 200)
         response = self.client.post("/inscription/", {"username": "nouveau", "email": "new@example.test",
-            "password1": "LongMotDePasseInattendu789!", "password2": "LongMotDePasseInattendu789!"})
+            "password1": "LongMotDePasseInattendu789!", "password2": "LongMotDePasseInattendu789!", "accept_terms": "on"})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(User.objects.filter(username="nouveau").exists())
     def test_admin_add_form_publishes_free_app(self):
@@ -657,3 +657,42 @@ class ManagedShowcaseTests(HubTestCase):
         self.assertEqual(saved.status_code, 302)
         self.assertEqual(HubAppearance.objects.get().submission_fee, 1800)
         self.assertEqual(self.client.get("/").context["submission_fee"], 1800)
+
+class QuickRelatedTests(HubTestCase):
+    def test_category_and_depositor_can_be_added_without_leaving_admin(self):
+        self.client.force_login(self.admin)
+        form = self.client.get(reverse("admin:hub_application_quick_category"))
+        self.assertEqual(form.status_code, 200)
+        self.assertContains(form, 'name="name"')
+        created = self.client.post(reverse("admin:hub_application_quick_category"), {"name": "Santé"}, HTTP_X_REQUESTED_WITH="fetch")
+        self.assertEqual(created.status_code, 200)
+        payload = created.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(Category.objects.get(pk=payload["value"]).slug, "sante")
+        duplicate = self.client.post(reverse("admin:hub_application_quick_category"), {"name": "santé"}, HTTP_X_REQUESTED_WITH="fetch")
+        self.assertEqual(duplicate.status_code, 400)
+        depositor = self.client.post(reverse("admin:hub_application_quick_depositor"), {
+            "username": "deposant-test", "email": "d@example.test", "password": "LongMotDePasseInattendu789!",
+            "first_name": "Awa", "last_name": "Nguema",
+        }, HTTP_X_REQUESTED_WITH="fetch")
+        self.assertEqual(depositor.status_code, 200)
+        self.assertTrue(depositor.json()["ok"])
+        self.assertFalse(User.objects.get(username="deposant-test").is_staff)
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse("admin:hub_application_quick_category")).status_code, 302)
+
+class TermsAndDirectoryTests(HubTestCase):
+    def test_terms_are_public_and_the_directory_filters(self):
+        page = self.client.get(reverse("hub:terms"))
+        self.assertContains(page, "Conditions générales d'utilisation")
+        self.assertContains(page, "répertoire")
+        self.client.force_login(self.user)
+        self.assertContains(self.client.get(reverse("hub:submit")), reverse("hub:terms"))
+        self.client.force_login(self.admin)
+        listing = self.client.get(reverse("admin:hub_application_changelist"))
+        self.assertContains(listing, "console-chip-row")
+        self.assertContains(listing, "Application externe")
+        offered = self.client.get(reverse("admin:hub_application_changelist"), {"abonnement": "offert"})
+        self.assertNotContains(offered, "Application externe")
+        due = self.client.get(reverse("admin:hub_application_changelist"), {"abonnement": "regler"})
+        self.assertContains(due, "Application externe")

@@ -32,12 +32,14 @@ class PwaTests(TestCase):
         self.assertEqual(self.client.get('/hors-ligne/').status_code, 404)
         self.assertEqual(self.client.get('/pwa/catalogue.json').status_code, 404)
 
-    def test_install_page_retains_installation_without_library(self):
-        response = self.client.get('/installer/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-pwa-install')
-        self.assertNotContains(response, '/hors-ligne/')
-        self.assertNotContains(response, 'data-pwa-clear')
+    def test_install_page_is_retired_and_native_files_are_absent_by_default(self):
+        self.assertEqual(self.client.get('/installer/').status_code, 404)
+        self.assertEqual(self.client.get('/applications-natives/android/').status_code, 404)
+        self.assertEqual(self.client.get('/applications-natives/ios/').status_code, 404)
+        home = self.client.get('/')
+        self.assertContains(home, 'data-install-hub')
+        self.assertContains(home, 'data-legal="terms"')
+        self.assertNotContains(home, '/installer/')
 
 
 class AdminConsoleTests(TestCase):

@@ -1,0 +1,5 @@
+<form class="console-related-form" method="post" action="{{ request.path }}">
+{% csrf_token %}
+<p class="console-related-lead">{{ kicker }} · {{ title }}</p>
+{{ form.as_p }}
+</form>
