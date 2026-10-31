@@ -1,4 +1,10 @@
 from django import template
+from django.db.models import Count, Q, Sum, Exists, OuterRef
+from django.db.models.functions import TruncDate
+from datetime import timedelta
+from django.contrib.admin.models import LogEntry
+from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 register = template.Library()
@@ -40,6 +46,7 @@ ICONS = {
     "sparkles": '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/>',
     "clock": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     "search": '<circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/>',
+    "bell": '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16Z"/><path d="M10 19a2 2 0 0 0 4 0"/>',
 }
 
 @register.simple_tag
@@ -54,6 +61,7 @@ MODEL_ICONS = {
     "PaymentEvent": "clock",
     "Review": "star",
     "HubAppearance": "palette",
+    "CatalogueFilter": "filter",
     "Advertisement": "image",
     "HubVisitor": "eye",
     "User": "user",
@@ -75,16 +83,108 @@ def payment_label(value):
     return str(value).replace("SingPay", "Paiement Mobile").replace("SINGPAY", "PAIEMENT MOBILE")
 
 
+def _daily_series(qs, date_field, days=14, amount_field=None):
+    today = timezone.localdate()
+    start = today - timedelta(days=days - 1)
+    rows = qs.filter(**{f"{date_field}__date__gte": start}).annotate(d=TruncDate(date_field))
+    mapped = {}
+    if amount_field:
+        for row in rows.values("d").annotate(n=Count("id"), t=Sum(amount_field)):
+            mapped[row["d"]] = {"n": row["n"] or 0, "t": row["t"] or 0}
+    else:
+        for row in rows.values("d").annotate(n=Count("id")):
+            mapped[row["d"]] = {"n": row["n"] or 0, "t": 0}
+    series = []
+    peak = 1
+    for i in range(days):
+        day = start + timedelta(days=i)
+        rec = mapped.get(day, {"n": 0, "t": 0})
+        val = int(rec["t"] or 0) if amount_field else rec["n"]
+        peak = max(peak, val)
+        series.append({"label": day.strftime("%d/%m"), "n": rec["n"], "t": rec["t"] or 0, "val": val})
+    for item in series:
+        item["pct"] = max(6, int(round((item["val"] / peak) * 100))) if item["val"] else 6
+    return series
+
+
+@register.simple_tag(takes_context=True)
+def console_overview(context):
+    from hub.models import Application, Payment, Advertisement, Review, HubAppearance, SubmissionNotice
+    user = context["request"].user
+    can_apps = user.has_perm("hub.view_application")
+    can_pay = user.has_perm("hub.view_payment")
+    can_ads = user.has_perm("hub.view_advertisement")
+    can_reviews = user.has_perm("hub.view_review")
+    can_settings = user.has_perm("hub.view_hubappearance") or user.has_perm("hub.change_hubappearance")
+    can_filters = user.has_perm("hub.view_cataloguefilter") or user.has_perm("hub.change_cataloguefilter")
+
+    apps_published = Application.objects.filter(status="published").count() if can_apps else 0
+    apps_review = Application.objects.filter(status="review").count() if can_apps else 0
+    apps_draft = Application.objects.filter(status="draft").count() if can_apps else 0
+    apps_rejected = Application.objects.filter(status="rejected").count() if can_apps else 0
+
+    pay_pending = Payment.objects.filter(status="pending") if can_pay else Payment.objects.none()
+    pay_success = Payment.objects.filter(status="success") if can_pay else Payment.objects.none()
+    pending_count = pay_pending.count() if can_pay else 0
+    pending_amount = (pay_pending.aggregate(total=Sum("amount"))["total"] or 0) if can_pay else 0
+    success_count = pay_success.count() if can_pay else 0
+    revenue = (pay_success.aggregate(total=Sum("amount"))["total"] or 0) if can_pay else 0
+    ads_active = Advertisement.objects.filter(is_active=True).count() if can_ads else 0
+
+    recent_apps = list(
+        Application.objects.select_related("category", "submitted_by")
+        .annotate(payment_ok=Exists(Payment.objects.filter(application=OuterRef("pk"), status="success", amount=OuterRef("fee_amount"), currency="XAF", verified_at__isnull=False, valid_until__gt=timezone.now())))
+        .order_by("-created_at")[:6]
+    ) if can_apps else []
+
+    recent_payments = list(
+        Payment.objects.select_related("application", "user").order_by("-created_at")[:6]
+    ) if can_pay else []
+
+    recent_logs = list(LogEntry.objects.select_related("user", "content_type").order_by("-action_time")[:8]) if user.is_staff else []
+    chart_apps = _daily_series(Application.objects.all(), "created_at") if can_apps else []
+    chart_payments = _daily_series(Payment.objects.filter(status="success"), "created_at", amount_field="amount") if can_pay else []
+
+    appearance_obj = HubAppearance.objects.first() if can_settings else None
+    settings_url = (reverse("admin:hub_hubappearance_change", args=[appearance_obj.pk]) if appearance_obj else reverse("admin:hub_hubappearance_add")) if can_settings else ""
+
+    return {
+        "can_apps": can_apps,
+        "can_pay": can_pay,
+        "can_ads": can_ads,
+        "can_reviews": can_reviews,
+        "can_settings": can_settings,
+        "can_filters": can_filters,
+        "apps_published": apps_published,
+        "apps_review": apps_review,
+        "apps_draft": apps_draft,
+        "apps_rejected": apps_rejected,
+        "notices_unread": SubmissionNotice.objects.filter(seen_at__isnull=True).count() if can_apps else 0,
+        "pending_count": pending_count,
+        "pending_amount": pending_amount,
+        "success_count": success_count,
+        "revenue": revenue,
+        "ads_active": ads_active,
+        "reviews_count": Review.objects.filter(is_visible=True).count() if can_reviews else 0,
+        "recent_apps": recent_apps,
+        "recent_payments": recent_payments,
+        "recent_logs": recent_logs,
+        "chart_apps": chart_apps,
+        "chart_payments": chart_payments,
+        "settings_url": settings_url,
+    }
+
+
 @register.simple_tag(takes_context=True)
 def console_metrics(context):
     from django.urls import reverse
-    from hub.models import Application, Payment, Advertisement
+    from hub.models import Application, Payment, Advertisement, SubmissionNotice
     user = context['request'].user
     result = []
     if user.has_perm('hub.view_application'):
         result.extend([
             {'label': 'Applications publiées', 'value': Application.objects.filter(status='published').count(), 'help': 'Explorer le catalogue', 'icon': 'grid', 'url': reverse('admin:hub_application_changelist') + '?status__exact=published'},
-            {'label': 'À valider', 'value': Application.objects.filter(status='review').count(), 'help': 'Examiner les soumissions', 'icon': 'check', 'url': reverse('admin:hub_application_workflow') + '?stage=review'},
+            {'label': 'Nouvelles publications', 'value': SubmissionNotice.objects.filter(seen_at__isnull=True).count(), 'help': 'Fiches confirmées à lire', 'icon': 'bell', 'url': reverse('admin:hub_application_notices')},
         ])
     if user.has_perm('hub.view_payment'):
         result.append({'label': 'Paiements en attente', 'value': Payment.objects.filter(status='pending').count(), 'help': 'Vérifier les transactions', 'icon': 'wallet', 'url': reverse('admin:hub_application_workflow') + '?stage=pending' if user.has_perm('hub.view_application') else reverse('admin:hub_payment_changelist') + '?status__exact=pending'})
@@ -92,6 +192,12 @@ def console_metrics(context):
     if user.has_perm('hub.view_advertisement'):
         result.append({'label': 'Publicités activées', 'value': Advertisement.objects.filter(is_active=True).count(), 'help': 'Gérer la visibilité', 'icon': 'image', 'url': reverse('admin:hub_advertisement_changelist')})
     return result
+
+
+@register.simple_tag
+def unread_notice_count():
+    from hub.models import SubmissionNotice
+    return SubmissionNotice.objects.filter(seen_at__isnull=True).count()
 
 
 @register.filter

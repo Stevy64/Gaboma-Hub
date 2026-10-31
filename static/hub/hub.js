@@ -134,11 +134,15 @@ document.querySelectorAll('.hub-form textarea[maxlength]').forEach(input => {
 // Indicateurs réels de navigation et d'envoi : aucune attente artificielle.
 (() => {
   const progress = document.querySelector('#navigation-progress');
-  if (!progress) return;
-  let timer;
-  const show = () => { clearTimeout(timer); timer = setTimeout(() => { progress.hidden = false; }, 120); };
+  const loader = document.querySelector('#hub-loader');
+  if (!progress && !loader) return;
+  const show = () => {
+    if (progress) progress.hidden = false;
+    if (loader) loader.hidden = false;
+  };
   const reset = () => {
-    clearTimeout(timer); progress.hidden = true;
+    if (progress) progress.hidden = true;
+    if (loader) loader.hidden = true;
     document.querySelectorAll('form[aria-busy="true"]').forEach(form => {
       form.removeAttribute('aria-busy'); delete form.dataset.submitting;
       form.querySelectorAll('button[data-busy-disabled]').forEach(button => {
@@ -158,6 +162,7 @@ document.querySelectorAll('.hub-form textarea[maxlength]').forEach(input => {
   document.addEventListener('submit', event => {
     if (event.defaultPrevented) return;
     const form = event.target;
+    if (form.getAttribute('action')?.includes('/favoris/')) return;
     if (form.dataset.submitting) { event.preventDefault(); return; }
     form.dataset.submitting = 'true'; form.setAttribute('aria-busy', 'true'); show();
     // Après capture du submitter par le navigateur, pour conserver ses éventuels paramètres.
@@ -165,6 +170,84 @@ document.querySelectorAll('.hub-form textarea[maxlength]').forEach(input => {
       if (!button.disabled) { button.disabled = true; button.dataset.busyDisabled = 'true'; }
     }), 0);
   });
+})();
+
+// Le cœur se met à jour sur place : pas de rechargement de la page.
+(() => {
+  const sameAction = (form, action) => {
+    try { return new URL(form.action, location.href).pathname === action; }
+    catch { return false; }
+  };
+  const paint = (button, liked, pop) => {
+    button.classList.toggle('is-favorite', liked);
+    button.setAttribute('aria-pressed', liked ? 'true' : 'false');
+    if (button.dataset.name) {
+      button.setAttribute('aria-label', liked ? `Retirer ${button.dataset.name} des favoris` : `Ajouter ${button.dataset.name} aux favoris`);
+    }
+    const label = button.querySelector('.favorite-label');
+    if (label) label.textContent = liked ? 'Dans mes favoris' : 'Ajouter aux favoris';
+    const icon = button.querySelector('.ui-icon');
+    if (!icon) return;
+    icon.classList.remove('is-pop');
+    if (pop && liked) {
+      icon.addEventListener('animationend', () => icon.classList.remove('is-pop'), { once: true });
+      icon.offsetWidth;
+      icon.classList.add('is-pop');
+    }
+  };
+  document.addEventListener('submit', async (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.getAttribute('action')?.includes('/favoris/')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const action = new URL(form.action, location.href).pathname;
+    const forms = [...document.querySelectorAll('form')].filter(other => sameAction(other, action));
+    if (forms.some(other => other.dataset.pending)) return;
+    forms.forEach(other => { other.dataset.pending = 'true'; });
+    const buttons = forms.map(other => other.querySelector('button')).filter(Boolean);
+    const source = form.querySelector('button');
+    const liked = source ? !source.classList.contains('is-favorite') : true;
+    buttons.forEach(button => paint(button, liked, button === source));
+    try {
+      const response = await fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'X-Requested-With': 'fetch', 'Accept': 'application/json' },
+        credentials: 'same-origin',
+      });
+      if (response.redirected || !response.headers.get('content-type')?.includes('json')) {
+        location.assign(response.url || form.querySelector('[name=next]')?.value || '/');
+        return;
+      }
+      if (!response.ok) throw new Error('favorite');
+      const data = await response.json();
+      buttons.forEach(button => {
+        if (button.classList.contains('is-favorite') !== !!data.liked) paint(button, !!data.liked, false);
+      });
+      if (!data.liked && new URLSearchParams(location.search).get('vue') === 'favoris') {
+        document.querySelectorAll('#app-catalogue .app-card').forEach(card => {
+          if (card.querySelector('form') && sameAction(card.querySelector('form'), action)) card.remove();
+        });
+        const grid = document.querySelector('#app-catalogue');
+        const count = document.querySelector('#applications .count');
+        if (count) count.textContent = String(grid ? grid.querySelectorAll('.app-card').length : 0);
+        if (grid && !grid.querySelector('.app-card') && !grid.querySelector('.empty-state')) {
+          const empty = document.createElement('div');
+          empty.className = 'empty-state full-grid';
+          const title = document.createElement('h3');
+          title.textContent = 'Choisissez vos essentiels.';
+          const copy = document.createElement('p');
+          copy.textContent = 'Touchez le cœur d’une application pour la retrouver ici.';
+          empty.append(title, copy);
+          grid.append(empty);
+        }
+      }
+    } catch {
+      buttons.forEach(button => paint(button, !liked, false));
+    } finally {
+      forms.forEach(other => { delete other.dataset.pending; });
+    }
+  }, true);
 })();
 // Apparitions uniques : le contenu reste visible sans JavaScript.
 (() => {
@@ -177,7 +260,199 @@ document.querySelectorAll('.hub-form textarea[maxlength]').forEach(input => {
       observer.unobserve(entry.target);
     });
   }, {threshold: 0.08});
-  document.querySelectorAll('.discovery-banner,.discovery-section,.catalogue-kicker,.creator-banner').forEach(section => observer.observe(section));
+  document.querySelectorAll('.discovery-banner,.discovery-section,.catalogue-kicker,.creator-banner,.apps-section').forEach(section => observer.observe(section));
+})();
+
+(() => {
+  const jumps = document.querySelector('.section-jumps');
+  if (!jumps || !('IntersectionObserver' in window)) return;
+  const links = [...jumps.querySelectorAll('a[href^="#"]')];
+  const sections = links.map(link => document.querySelector(link.getAttribute('href'))).filter(Boolean);
+  if (!sections.length) return;
+  const mark = (id) => links.forEach(link => {
+    if (link.getAttribute('href') === '#' + id) link.setAttribute('aria-current', 'true');
+    else link.removeAttribute('aria-current');
+  });
+  const spy = new IntersectionObserver(entries => {
+    const visible = entries.filter(entry => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) mark(visible.target.id);
+  }, { rootMargin: '-20% 0px -55% 0px', threshold: [0.15, 0.4] });
+  sections.forEach(section => spy.observe(section));
+  links.forEach(link => link.addEventListener('click', () => mark(link.getAttribute('href').slice(1))));
+})();
+
+// Feuilles basses : filtres du catalogue et aperçu d'une application.
+(() => {
+  const sheet = document.querySelector('#hub-sheet');
+  if (!sheet) return;
+  const card = sheet.querySelector('.hub-sheet-card');
+  const body = document.querySelector('#hub-sheet-body');
+  const actions = document.querySelector('#hub-sheet-actions');
+  const kicker = document.querySelector('#hub-sheet-kicker');
+  const title = document.querySelector('#hub-sheet-title');
+  if (!card || !body || !actions) return;
+  let restore = null;
+  let closing = false;
+  const finish = () => {
+    if (!closing) return;
+    closing = false;
+    sheet.hidden = true;
+    sheet.classList.remove('is-closing');
+    if (restore) { restore(); restore = null; }
+    body.replaceChildren();
+    actions.replaceChildren();
+    document.body.classList.remove('hub-sheet-open');
+  };
+  const close = () => {
+    if (sheet.hidden || closing) return;
+    closing = true;
+    sheet.classList.add('is-closing');
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { finish(); return; }
+    const timer = setTimeout(finish, 420);
+    card.addEventListener('animationend', (event) => {
+      if (event.target !== card) return;
+      clearTimeout(timer);
+      finish();
+    });
+  };
+  const openSheet = ({ kickerText, titleText, node, actionNodes, restoreNode }) => {
+    if (!sheet.hidden) { closing = true; finish(); }
+    restore = restoreNode || null;
+    kicker.textContent = kickerText;
+    title.textContent = titleText;
+    body.replaceChildren(node);
+    actions.replaceChildren(...(actionNodes || []));
+    sheet.hidden = false;
+    document.body.classList.add('hub-sheet-open');
+    sheet.querySelector('.hub-sheet-x').focus();
+  };
+  const panel = document.querySelector('.filter-panel');
+  const options = panel?.querySelector('.filter-options');
+  panel?.querySelector('summary')?.addEventListener('click', (event) => {
+    if (!options) return;
+    event.preventDefault();
+    const form = panel.closest('form');
+    if (form && !form.id) form.id = 'catalogue-form';
+    if (form) options.querySelectorAll('input, select, textarea, button').forEach((field) => field.setAttribute('form', form.id));
+    openSheet({
+      kickerText: 'Catalogue', titleText: 'Filtres', node: options,
+      restoreNode: () => panel.append(options),
+    });
+  });
+  const linkButton = (className, href, label, external) => {
+    const link = document.createElement('a');
+    link.className = className;
+    link.href = href;
+    link.textContent = label;
+    if (external) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+    return link;
+  };
+  document.addEventListener('click', (event) => {
+    const preview = event.target.closest('[data-app-preview]');
+    if (!preview || event.target.closest('.compact-favorite')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const node = document.createElement('div');
+    node.className = 'app-preview';
+    const hero = document.createElement('div');
+    hero.className = 'app-preview-hero';
+    if (preview.dataset.cover) {
+      const image = document.createElement('img');
+      image.alt = '';
+      image.src = preview.dataset.cover;
+      hero.append(image);
+    }
+    const copy = document.createElement('p');
+    copy.className = 'app-preview-copy';
+    copy.textContent = preview.dataset.description || '';
+    const rating = document.createElement('p');
+    rating.className = 'app-preview-rating';
+    rating.textContent = preview.dataset.rating || '';
+    node.append(hero, copy, rating);
+    const buttons = [linkButton('hub-sheet-go', preview.dataset.detail, 'Voir les détails')];
+    if (preview.dataset.open) buttons.push(linkButton('hub-sheet-next', preview.dataset.open, 'Ouvrir l’app', true));
+    else {
+      const wait = document.createElement('span');
+      wait.className = 'hub-sheet-next';
+      wait.textContent = 'Lien à venir';
+      buttons.push(wait);
+    }
+    openSheet({ kickerText: preview.dataset.category || 'Application', titleText: preview.dataset.name || 'Application', node, actionNodes: buttons });
+  }, true);
+  sheet.querySelectorAll('[data-hub-sheet-close]').forEach((button) => button.addEventListener('click', close));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !sheet.hidden) close(); });
+  let startY = 0;
+  let dragging = false;
+  card.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || !event.target.closest('.hub-sheet-grab')) return;
+    dragging = true;
+    startY = event.clientY;
+    card.style.transition = 'none';
+  });
+  card.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    card.style.transform = `translateY(${Math.max(0, event.clientY - startY)}px)`;
+  });
+  const endDrag = (event) => {
+    if (!dragging) return;
+    dragging = false;
+    const distance = Math.max(0, event.clientY - startY);
+    card.style.transition = '';
+    card.style.transform = '';
+    if (distance > 90) close();
+  };
+  card.addEventListener('pointerup', endDrag);
+  card.addEventListener('pointercancel', endDrag);
+})();
+
+// Le répertoire charge la suite au fil du scroll, sans recharger la page.
+(() => {
+  const grid = document.querySelector('#app-catalogue');
+  const sentinel = document.querySelector('.catalogue-sentinel');
+  if (!grid || !sentinel || !('IntersectionObserver' in window)) return;
+  const spinner = sentinel.querySelector('.hub-loader-mark');
+  const more = sentinel.querySelector('.catalogue-more');
+  let next = sentinel.dataset.next;
+  let busy = false;
+  let streak = 0;
+  const take = async (manual) => {
+    if (!next || busy) return;
+    busy = true;
+    let loaded = false;
+    if (manual) streak = 0;
+    if (spinner) spinner.hidden = false;
+    if (more) more.hidden = true;
+    try {
+      const response = await fetch(next, { headers: { 'X-Requested-With': 'fetch' } });
+      if (!response.ok) throw new Error('catalogue');
+      const box = document.createElement('div');
+      box.innerHTML = await response.text();
+      box.querySelectorAll('.app-card').forEach((item) => grid.append(item));
+      next = box.querySelector('.catalogue-meta')?.dataset.next || '';
+      if (!next) { sentinel.remove(); observer.disconnect(); }
+      loaded = true;
+    } catch {
+      if (more) { more.hidden = false; more.textContent = 'Réessayer'; }
+    } finally {
+      busy = false;
+      if (spinner) spinner.hidden = true;
+    }
+    if (!loaded || !next || !sentinel.isConnected) return;
+    streak += 1;
+    const room = sentinel.getBoundingClientRect().top < window.innerHeight + 280;
+    // Quatre lots d'affilée, puis un geste : le navigateur ne monte pas des milliers de fiches seul.
+    if (streak >= 4) {
+      streak = 0;
+      if (more) { more.hidden = false; more.textContent = 'Continuer le répertoire'; }
+      return;
+    }
+    if (room) take(false);
+  };
+  if (more) more.addEventListener('click', (event) => { event.preventDefault(); take(true); });
+  const observer = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) take();
+  }, { rootMargin: '280px' });
+  observer.observe(sentinel);
 })();
 
 // En-tête toujours visible : seuils distincts pour éviter les oscillations.
@@ -275,4 +550,60 @@ document.querySelectorAll('.hub-form textarea[maxlength]').forEach(input => {
     }
     wrapper.append(trigger,menu); select.classList.add('hub-select-native'); select.tabIndex = -1; select.setAttribute('aria-hidden','true'); sync();
   });
+})();
+
+// La note est le nombre d'étoiles allumées, de la première jusqu'à celle choisie.
+(() => {
+  document.querySelectorAll('.rating-picker').forEach(picker => {
+    const labels = [...picker.querySelectorAll('label')].filter(label => label.querySelector('input'));
+    if (!labels.length) return;
+    const paint = (value) => labels.forEach(label => {
+      label.classList.toggle('is-on', Number(label.querySelector('input').value) <= value);
+    });
+    const current = () => {
+      const checked = picker.querySelector('input:checked');
+      return checked ? Number(checked.value) : 0;
+    };
+    picker.addEventListener('pointerover', event => {
+      const label = event.target.closest('label');
+      if (!label || !picker.contains(label)) return;
+      const input = label.querySelector('input');
+      if (input) paint(Number(input.value));
+    });
+    picker.addEventListener('pointerleave', () => paint(current()));
+    picker.addEventListener('focusin', event => {
+      const input = event.target.closest('input');
+      if (input && picker.contains(input)) paint(Number(input.value));
+    });
+    picker.addEventListener('focusout', event => {
+      if (!picker.contains(event.relatedTarget)) paint(current());
+    });
+    picker.addEventListener('change', () => paint(current()));
+    paint(current());
+  });
+})();
+
+(() => {
+  const hero = document.querySelector('[data-hero-carousel]');
+  if (!hero) return;
+  const slides = [...hero.querySelectorAll('.hero-slide')];
+  if (slides.length < 2) return;
+  const dots = [...hero.querySelectorAll('[data-hero-dot]')];
+  let index = 0;
+  let timer = 0;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const show = (next) => {
+    index = (next + slides.length) % slides.length;
+    slides.forEach((slide, i) => slide.classList.toggle('is-active', i === index));
+    dots.forEach((dot, i) => dot.setAttribute('aria-current', i === index ? 'true' : 'false'));
+  };
+  const arm = () => {
+    clearInterval(timer);
+    if (reduced) return;
+    timer = setInterval(() => show(index + 1), 5500);
+  };
+  hero.querySelector('[data-hero-prev]')?.addEventListener('click', () => { show(index - 1); arm(); });
+  hero.querySelector('[data-hero-next]')?.addEventListener('click', () => { show(index + 1); arm(); });
+  dots.forEach((dot) => dot.addEventListener('click', () => { show(Number(dot.dataset.heroDot)); arm(); }));
+  arm();
 })();

@@ -1,1 +1,77 @@
-{% extends 'base.html' %}{% load hub_tags %}{% block title %}Suivi de {{ application.name }} · Gaboma Hub{% endblock %}{% block content %}<section class="page-shell narrow"><a class="back-link" href="{% url 'hub:dashboard' %}">{% ui_icon 'back' %} Mes soumissions</a><p class="eyebrow">VOTRE FICHE</p><h1>{{ application.name }}</h1><ol class="progress-steps" aria-label="Étapes de votre soumission"><li class="complete">{% ui_icon 'check' %}<span class="sr-only">Étape terminée : </span>Fiche créée</li><li class="{% if paid or application.is_admin_added %}complete{% endif %}">{% if paid or application.is_admin_added %}{% ui_icon 'check' %}<span class="sr-only">Étape terminée : </span>{% else %}<b aria-hidden="true">2</b>{% endif %}{% if application.is_admin_added %}Sans frais{% else %}Paiement{% endif %}</li><li class="{% if application.status == 'published' %}complete{% endif %}">{% if application.status == 'published' %}{% ui_icon 'check' %}<span class="sr-only">Étape terminée : </span>{% else %}<b aria-hidden="true">3</b>{% endif %}Validation</li></ol>{% if application.banner %}<div class="submission-media"><img src="{{ application.banner.url }}" alt="Bannière de votre application">{% if application.logo %}<img class="submission-logo" src="{{ application.logo.url }}" alt="Logo de votre application">{% endif %}</div>{% endif %}<article class="surface"><div class="status-line"><h2>{{ application.get_status_display }}</h2><span class="status status-{{ application.status }}">{% if application.is_admin_added %}Ajout par l'admin{% elif paid %}Paiement confirmé{% else %}{{ application.fee_amount|fcfa }}{% endif %}</span></div><p class="lead small-lead">{{ application.description }}</p><p class="site-address">{{ application.website_url|default:'Adresse à compléter' }}</p>{% if application.moderation_note %}<p class="notice">{{ application.moderation_note }}</p>{% endif %}{% if application.status == 'published' %}<p>Votre application figure maintenant dans le catalogue.</p><a class="primary-button button-link" href="{{ application.get_absolute_url }}">Voir la fiche publique ↗</a>{% elif application.status == 'review' %}<p>Votre fiche est en cours de validation. Aucun paiement supplémentaire n'est nécessaire.</p>{% elif application.status == 'archived' %}<p>Cette fiche a été archivée par l'administration. Un nouveau paiement ne la republiera pas.</p>{% elif application.status == 'rejected' %}<p>Consultez le retour de l'administration puis corrigez votre fiche. Pour toute question sur un paiement, indiquez sa référence à l'administrateur.</p><a class="secondary-button button-link" href="{% url 'hub:edit' application.public_id %}">{% ui_icon 'edit' %}Corriger la fiche</a>{% elif not paid and not application.is_admin_added %}<p>Confirmez la soumission avec un paiement unique de <strong>{{ application.fee_amount|fcfa }}</strong> via Paiement Mobile. La publication intervient après validation par l'administration.</p><form method="post" action="{% url 'hub:checkout' application.public_id %}" class="payment-confirm-form">{% csrf_token %}<label class="consent"><input type="checkbox" name="accept" value="yes" required> Je confirme le montant et comprends que la publication nécessite une validation.</label><button class="primary-button" type="submit">{% ui_icon 'wallet' %}Continuer vers Paiement Mobile · {{ application.fee_amount|fcfa }} ↗</button></form>{% if not singpay_ready %}<p class="fine-print">Le paiement sera disponible une fois les identifiants Paiement Mobile configurés par l'administrateur. Votre fiche est enregistrée.</p>{% endif %}<a class="text-button" href="{% url 'hub:edit' application.public_id %}">{% ui_icon 'edit' %}Modifier la fiche</a>{% endif %}</article>{% if payments %}<section class="surface payment-history"><h2>Historique des paiements</h2>{% for payment in payments %}<a class="payment-history-row" href="{% url 'hub:payment-return' payment.public_id %}"><div><strong>{{ payment.amount|fcfa }}</strong><small>{{ payment.reference }}</small></div><span class="status status-{{ payment.status }}">{{ payment.get_status_display }}</span></a>{% endfor %}</section>{% endif %}</section>{% endblock %}
+{% extends 'base.html' %}{% load hub_tags %}
+{% block title %}Suivi de {{ application.name }} · Gaboma Hub{% endblock %}
+{% block content %}
+<section class="page-shell narrow">
+{% if request.GET.published == "1" and application.status == "published" %}
+<dialog class="publish-dialog" id="publish-dialog" aria-labelledby="publish-dialog-title">
+  <p class="eyebrow">Validation</p>
+  <h2 id="publish-dialog-title">Félicitations</h2>
+  <p><strong>{{ application.name }}</strong> est publiée dans le Hub. Les visiteurs peuvent la découvrir dès maintenant.</p>
+  <div class="publish-dialog-actions">
+    <a class="primary-button button-link" href="{{ application.get_absolute_url }}">Voir la fiche publique</a>
+    <form method="dialog"><button class="secondary-button" type="submit">Continuer</button></form>
+  </div>
+</dialog>
+<script>document.getElementById("publish-dialog")?.showModal()</script>
+{% endif %}
+<a class="back-link" href="{% url 'hub:dashboard' %}">{% ui_icon 'back' %} Mes soumissions</a>
+<p class="eyebrow">VOTRE FICHE</p>
+<h1>{{ application.name }}</h1>
+<ol class="progress-steps" aria-label="Étapes de votre soumission">
+<li class="complete">{% ui_icon 'check' %}<span class="sr-only">Étape terminée : </span>Fiche créée</li>
+<li class="{% if paid or application.is_admin_added %}complete{% endif %}">{% if paid or application.is_admin_added %}{% ui_icon 'check' %}<span class="sr-only">Étape terminée : </span>{% else %}<b aria-hidden="true">2</b>{% endif %}{% if application.is_admin_added %}Sans frais{% else %}Paiement{% endif %}</li>
+<li class="{% if application.status == 'published' %}complete{% endif %}">{% if application.status == 'published' %}{% ui_icon 'check' %}<span class="sr-only">Étape terminée : </span>{% else %}<b aria-hidden="true">3</b>{% endif %}Validation</li>
+</ol>
+{% if application.banner %}
+<div class="submission-media"><img src="{{ application.banner.url }}" alt="Bannière de votre application">{% if application.logo %}<img class="submission-logo" src="{{ application.logo.url }}" alt="Logo de votre application">{% endif %}</div>
+{% endif %}
+<article class="surface">
+<div class="status-line"><h2>{{ application.get_status_display }}</h2><span class="status status-{{ application.status }}">{% if application.is_admin_added %}Ajout par l'admin{% elif paid %}Abonnement jusqu'au {{ application.coverage_until|date:"d/m/Y" }}{% else %}{{ application.fee_amount|fcfa }} / an{% endif %}</span></div>
+<p class="lead small-lead">{{ application.description }}</p>
+<p class="site-address">{{ application.website_url|default:'Adresse à compléter' }}</p>
+{% if application.moderation_note %}<p class="notice">{{ application.moderation_note }}</p>{% endif %}
+{% if application.status == 'published' %}
+<p>Votre application figure maintenant dans le catalogue.</p>
+<a class="primary-button button-link" href="{{ application.get_absolute_url }}">Voir la fiche publique ↗</a>
+{% elif application.status == 'archived' %}
+<p>Cette fiche a été archivée par l'administration. Un nouveau paiement ne la republiera pas.</p>
+{% elif paid and not application.is_admin_added %}
+<h3>Relisez votre fiche</h3>
+<p>Le paiement est enregistré. Confirmez que ces informations sont exactes pour publier l'application dans le Hub.</p>
+<dl class="confirm-recap">
+<div><dt>Nom</dt><dd>{{ application.name }}</dd></div>
+<div><dt>Catégorie</dt><dd>{{ application.category }}</dd></div>
+<div><dt>Résumé</dt><dd>{{ application.description }}</dd></div>
+{% if application.about %}<div><dt>Présentation</dt><dd>{{ application.about }}</dd></div>{% endif %}
+<div><dt>Adresse</dt><dd>{{ application.website_url }}</dd></div>
+<div><dt>Créateur</dt><dd>{{ application.creator_name|default:application.submitted_by }}{% if application.creator_city %} · {{ application.creator_city }}{% endif %}</dd></div>
+<div><dt>Abonnement</dt><dd>{{ application.fee_amount|fcfa }} / an · jusqu'au {{ application.coverage_until|date:"d/m/Y H:i" }}</dd></div>
+<div><dt>Fiche créée</dt><dd>{{ application.created_at|date:"d/m/Y H:i" }}</dd></div>
+</dl>
+<form method="post" action="{% url 'hub:confirm' application.public_id %}" class="confirm-form">{% csrf_token %}
+<label class="consent"><input type="checkbox" name="confirm" value="yes" required> Je confirme que ces informations sont exactes et j'autorise la publication.</label>
+<button class="primary-button" type="submit">{% ui_icon 'check' %}Confirmer et publier</button>
+</form>
+{% if application.status == 'draft' or application.status == 'rejected' %}<a class="text-button" href="{% url 'hub:edit' application.public_id %}">{% ui_icon 'edit' %}Modifier la fiche</a>{% endif %}
+{% elif application.status == 'rejected' %}
+<p>Consultez le retour de l'administration puis corrigez votre fiche. Pour toute question sur un paiement, indiquez sa référence à l'administrateur.</p>
+<a class="secondary-button button-link" href="{% url 'hub:edit' application.public_id %}">{% ui_icon 'edit' %}Corriger la fiche</a>
+{% elif not paid and not application.is_admin_added %}
+<p>Confirmez un abonnement d'un an de <strong>{{ application.fee_amount|fcfa }}</strong> via Paiement Mobile. Vous relirez la fiche avant de la publier.</p>
+<form method="post" action="{% url 'hub:checkout' application.public_id %}" class="payment-confirm-form">{% csrf_token %}
+<label class="consent"><input type="checkbox" name="accept" value="yes" required> Je confirme le montant de l'abonnement d'un an.</label>
+<button class="primary-button" type="submit">{% ui_icon 'wallet' %}Continuer vers Paiement Mobile · {{ application.fee_amount|fcfa }} ↗</button>
+</form>
+{% if not singpay_ready %}<p class="fine-print">Le paiement sera disponible une fois les identifiants Paiement Mobile configurés par l'administrateur. Votre fiche est enregistrée.</p>{% endif %}
+<a class="text-button" href="{% url 'hub:edit' application.public_id %}">{% ui_icon 'edit' %}Modifier la fiche</a>
+{% endif %}
+</article>
+{% if payments %}
+<section class="surface payment-history"><h2>Historique des paiements</h2>
+{% for payment in payments %}
+<a class="payment-history-row" href="{% url 'hub:payment-return' payment.public_id %}"><div><strong>{{ payment.amount|fcfa }}</strong><small>{{ payment.reference }}</small></div><span class="status status-{{ payment.status }}">{{ payment.get_status_display }}</span></a>
+{% endfor %}
+</section>
+{% endif %}
+</section>
+{% endblock %}

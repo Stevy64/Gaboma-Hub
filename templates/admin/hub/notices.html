@@ -1,0 +1,52 @@
+{% extends "admin/base_site.html" %}{% load hub_tags %}
+{% block content_title %}{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Administration</a> › Nouvelles publications</div>{% endblock %}
+{% block content %}
+<div class="flow-shell">
+  <header class="console-top">
+    <div class="console-top-copy">
+      <p class="console-kicker">Notifications</p>
+      <h1>Nouvelles publications</h1>
+      <p class="console-lead">Chaque application confirmée par son créateur apparaît ici, avec l'heure de la fiche, du paiement et de la publication.</p>
+    </div>
+    <div class="console-top-cta">
+      {% if unread %}
+      <form method="post">{% csrf_token %}<button class="console-btn console-btn-primary" type="submit">Marquer comme lues · {{ unread }}</button></form>
+      {% endif %}
+      <a class="console-btn console-btn-ghost" href="{% url 'admin:hub_application_workflow' %}">Suivi des dossiers</a>
+    </div>
+  </header>
+  {% if notices %}
+  <ul class="notice-feed">
+    {% for notice in notices %}
+    <li class="console-panel notice-card{% if not notice.seen_at %} is-unread{% endif %}">
+      <div class="notice-card-head">
+        <div>
+          <p class="console-kicker">{% if not notice.seen_at %}Non lue{% else %}Lue le {{ notice.seen_at|date:"d/m/Y H:i" }}{% endif %}</p>
+          <h2>{{ notice.application.name }}</h2>
+        </div>
+        <span class="console-pill is-ok">{{ notice.application.get_status_display }}</span>
+      </div>
+      <p class="notice-summary">{{ notice.application.description }}</p>
+      {% if notice.application.about %}<p class="notice-about">{{ notice.application.about }}</p>{% endif %}
+      <dl class="notice-facts">
+        <div><dt>Catégorie</dt><dd>{{ notice.application.category }}</dd></div>
+        <div><dt>Créateur</dt><dd>{{ notice.application.creator_name|default:notice.application.submitted_by|default:"—" }}{% if notice.application.creator_city %} · {{ notice.application.creator_city }}{% endif %}</dd></div>
+        <div><dt>Adresse</dt><dd>{% if notice.application.website_url %}<a href="{{ notice.application.website_url }}">{{ notice.application.website_url }}</a>{% else %}—{% endif %}</dd></div>
+        <div><dt>Abonnement</dt><dd>{{ notice.application.fee_amount|fcfa }} / an</dd></div>
+        <div><dt>Fiche créée</dt><dd>{{ notice.application.created_at|date:"d/m/Y H:i" }}</dd></div>
+        <div><dt>Paiement confirmé</dt><dd>{% if notice.payment %}{{ notice.payment.verified_at|date:"d/m/Y H:i" }} · {{ notice.payment.reference }}{% else %}—{% endif %}</dd></div>
+        <div><dt>Publiée</dt><dd>{{ notice.created_at|date:"d/m/Y H:i" }}</dd></div>
+      </dl>
+      <div class="notice-card-actions">
+        <a class="console-btn console-btn-ghost" href="{% url 'admin:hub_application_workflow_detail' notice.application.pk %}">Ouvrir le dossier</a>
+        <a class="console-btn console-btn-ghost" href="{{ notice.application.get_absolute_url }}">Voir sur le Hub</a>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <section class="console-panel console-empty-row">Aucune publication confirmée pour le moment.</section>
+  {% endif %}
+</div>
+{% endblock %}

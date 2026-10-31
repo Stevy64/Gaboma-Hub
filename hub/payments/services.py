@@ -1,4 +1,4 @@
-"""Paiement unique par soumission, confirmé auprès de Paiement Mobile uniquement."""
+"""Abonnement annuel par soumission, confirmé auprès de Paiement Mobile uniquement."""
 import uuid
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlsplit
@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.urls import reverse
 from django.utils import timezone
-from hub.models import Application, Payment
+from hub.models import Application, HubAppearance, Payment, covering_payments
 from .singpay import singpay_service, SUCCESS_STATUSES, FAILURE_STATUSES
 
 class PaymentUnavailable(Exception):
@@ -27,12 +27,20 @@ def start_checkout(application, user):
         raise PaymentUnavailable("Paiement Mobile n'est pas encore configuré. Votre fiche est conservée ; aucun paiement n'a été effectué.")
     with transaction.atomic():
         app = Application.objects.select_for_update().get(pk=application.pk)
-        paid = app.payments.filter(status=Payment.Status.SUCCESS).first()
+        paid = covering_payments(app.pk, app.fee_amount).first()
         if paid: return paid
         current = app.payments.filter(status=Payment.Status.PENDING).first()
         if current: return current
-        if app.status not in [Application.Status.DRAFT, Application.Status.REJECTED]:
+        if app.status == Application.Status.ARCHIVED:
+            raise ValidationError("Un dossier archivé ne peut pas être renouvelé.")
+        expired = app.payments.filter(status=Payment.Status.SUCCESS).exists()
+        if not expired and app.status not in [Application.Status.DRAFT, Application.Status.REJECTED]:
             raise ValidationError("Cette fiche ne peut pas faire l'objet d'un nouveau paiement.")
+        if expired:
+            price = HubAppearance.current().submission_fee
+            if app.fee_amount != price:
+                app.fee_amount = price
+                app.save(update_fields=["fee_amount", "updated_at"])
         payment = Payment.objects.create(application=app, user=user, amount=app.fee_amount,
             currency="XAF", reference=f"HUB-{uuid.uuid4().hex.upper()}")
     path = reverse("hub:payment-return", kwargs={"public_id": payment.public_id})
@@ -109,7 +117,6 @@ def verify_payment(payment):
             return _message(payment, "Identifiant Paiement Mobile différent : paiement non validé.")
         try:
             with transaction.atomic():
-                app = Application.objects.select_for_update().get(pk=payment.application_id)
                 locked = Payment.objects.select_for_update().get(pk=payment.pk)
                 if locked.status == Payment.Status.SUCCESS: return "Paiement déjà confirmé."
                 locked.status = Payment.Status.SUCCESS
@@ -117,14 +124,10 @@ def verify_payment(payment):
                 locked.verified_at = timezone.now()
                 locked.verification_message = "Montant et référence confirmés directement auprès de Paiement Mobile."
                 locked.save(update_fields=["status", "provider_transaction_id", "verified_at", "verification_message", "updated_at"])
-                # Un paiement tardif ne réactive jamais une fiche refusée ou archivée.
-                if app.status == Application.Status.DRAFT:
-                    app.status = Application.Status.REVIEW
-                    app.save(update_fields=["status", "updated_at"])
         except IntegrityError:
             return _message(payment, "Identifiant prestataire déjà lié à un autre paiement : vérification administrative requise.")
         payment.refresh_from_db()
-        return "Paiement confirmé. Votre application attend la validation de l'administration."
+        return "Paiement confirmé. Relisez votre fiche puis confirmez-la pour la publier."
     if status in FAILURE_STATUSES:
         Payment.objects.filter(pk=payment.pk).exclude(status=Payment.Status.SUCCESS).update(
             status=Payment.Status.CANCELLED if status in {"cancelled", "canceled"} else Payment.Status.FAILED,

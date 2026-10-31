@@ -20,7 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 from .admin import ApplicationAdmin, AppearanceAdmin
 from .forms import ApplicationForm
-from .models import Application, Category, Favorite, Payment, PaymentEvent, Review, HubAppearance, Advertisement
+from .models import Application, CatalogueFilter, Category, Favorite, HeroSlide, Payment, PaymentEvent, Review, HubAppearance, Advertisement, SubmissionNotice
 from .payments.services import PaymentUnavailable, checkout_url_is_safe, exact_amount, start_checkout, verify_payment
 from .payments.singpay import SingPayService
 
@@ -124,7 +124,7 @@ class HomepageOptionsTests(HubTestCase):
         with self.assertRaises(ValidationError): ad.full_clean()
     def test_admin_can_upload_hero_and_ad_using_image_validation(self):
         self.client.force_login(self.admin)
-        response = self.client.post(reverse("admin:hub_hubappearance_add"), {"hero_background": self.image_upload(), "hero_background_enabled": "on", "submission_fee": 2000, "hero_badge": "Gabon", "hero_title": "Nos apps", "hero_subtitle": "À découvrir", "hero_description": "Les créations locales", "showcase_enabled": "on", "discovery_enabled": "on", "_save": "Enregistrer"})
+        response = self.client.post(reverse("admin:hub_hubappearance_add"), {"hero_background": self.image_upload(), "hero_background_enabled": "on", "submission_fee": 2500, "hero_badge": "Gabon", "hero_title": "Nos apps", "hero_subtitle": "À découvrir", "hero_description": "Les créations locales", "showcase_enabled": "on", "discovery_enabled": "on", "slides-TOTAL_FORMS": "0", "slides-INITIAL_FORMS": "0", "slides-MIN_NUM_FORMS": "0", "slides-MAX_NUM_FORMS": "1000", "_save": "Enregistrer"})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(HubAppearance.objects.get().hero_background.name.endswith(".webp"))
         self.assertFalse(AppearanceAdmin(HubAppearance, AdminSite()).has_delete_permission(RequestFactory().get('/')))
@@ -248,6 +248,29 @@ class CatalogueTests(HubTestCase):
         call_command("seed_hub", verbosity=0)
         app.refresh_from_db()
         self.assertEqual(app.description, "Texte personnalisé")
+    def test_catalogue_loads_the_next_page_when_the_directory_grows(self):
+        from hub.views import CATALOGUE_PAGE_SIZE
+        for index in range(CATALOGUE_PAGE_SIZE + 1):
+            app = Application.objects.create(name=f"Lot {index:02d}", slug=f"lot-{index:02d}", category=self.category, description="Une application du lot.", website_url="https://example.com", is_admin_added=True)
+            app.approve(self.admin)
+        first = self.client.get("/")
+        self.assertEqual(len(first.context["applications"]), CATALOGUE_PAGE_SIZE)
+        self.assertContains(first, 'class="catalogue-sentinel"')
+        second = self.client.get(reverse("hub:catalogue"), {"page": 2})
+        self.assertEqual(len(second.context["applications"]), 1)
+        self.assertNotContains(second, "<html")
+        self.assertEqual(len(self.client.get(reverse("hub:catalogue"), {"page": "9999"}).context["applications"]), 0)
+    def test_discovery_rails_stay_short_when_the_catalogue_grows(self):
+        from hub.views import RAIL_SIZE
+        for index in range(RAIL_SIZE + 4):
+            app = Application.objects.create(name=f"Rail {index:02d}", slug=f"rail-{index:02d}", category=self.category, description="Une application du rail.", website_url="https://example.com", is_admin_added=True)
+            app.approve(self.admin)
+        home = self.client.get("/")
+        rails = {rail["id"]: rail for rail in home.context["discovery_rails"]}
+        self.assertLessEqual(len(rails["available-apps"]["apps"]), RAIL_SIZE)
+        self.assertTrue(rails["available-apps"]["more"])
+        self.assertContains(home, "Tout le répertoire")
+        self.assertIn("about", home.context["applications"][0].get_deferred_fields())
     def test_search_and_category_filters(self):
         self.app.is_admin_added = True
         self.app.approve(self.admin)
@@ -276,6 +299,17 @@ class CatalogueTests(HubTestCase):
         self.client.force_login(self.user)
         response = self.client.post(reverse("hub:favorite", args=[self.app.public_id]), {"next": "https://evil.example/"})
         self.assertEqual(response.url, "/")
+    def test_favorite_toggle_answers_without_a_reload(self):
+        self.app.is_admin_added = True
+        self.app.approve(self.admin)
+        self.client.force_login(self.user)
+        url = reverse("hub:favorite", args=[self.app.public_id])
+        liked = self.client.post(url, HTTP_X_REQUESTED_WITH="fetch")
+        self.assertEqual(liked.status_code, 200)
+        self.assertEqual(liked.json()["liked"], True)
+        removed = self.client.post(url, HTTP_X_REQUESTED_WITH="fetch")
+        self.assertEqual(removed.json()["liked"], False)
+        self.assertFalse(Favorite.objects.filter(user=self.user, application=self.app).exists())
     def test_foreign_submission_and_payment_are_private(self):
         payment = self.payment()
         self.client.force_login(self.other)
@@ -291,7 +325,7 @@ class CatalogueTests(HubTestCase):
         self.assertEqual(response.status_code, 302)
         app = Application.objects.get(name="App d'un tiers")
         self.assertEqual(app.status, Application.Status.DRAFT)
-        self.assertEqual(app.fee_amount, 2000)
+        self.assertEqual(app.fee_amount, 2500)
         self.assertEqual(app.submitted_by, self.user)
         self.assertFalse(app.is_admin_added)
     def test_unsafe_urls_are_rejected(self):
@@ -368,10 +402,33 @@ class PaymentTests(HubTestCase):
         payment.refresh_from_db(); self.app.refresh_from_db()
         self.assertEqual(payment.status, Payment.Status.SUCCESS)
         self.assertIsNotNone(payment.verified_at)
-        self.assertEqual(self.app.status, Application.Status.REVIEW)
+        self.assertEqual(self.app.status, Application.Status.DRAFT)
         self.assertNotContains(self.client.get("/"), self.app.name)
-        self.app.approve(self.admin)
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.post(reverse("hub:confirm", args=[self.app.public_id]), {"confirm": "yes"}).status_code, 404)
+        self.client.force_login(self.user)
+        self.client.post(reverse("hub:confirm", args=[self.app.public_id]), {})
+        self.app.refresh_from_db()
+        self.assertEqual(self.app.status, Application.Status.DRAFT)
+        published = self.client.post(reverse("hub:confirm", args=[self.app.public_id]), {"confirm": "yes"})
+        self.assertEqual(published.status_code, 302)
+        self.assertIn("published=1", published["Location"])
+        self.app.refresh_from_db()
+        self.assertEqual(self.app.status, Application.Status.PUBLISHED)
+        self.assertContains(self.client.get(published["Location"]), "Félicitations")
         self.assertContains(self.client.get("/"), self.app.name)
+        notice = SubmissionNotice.objects.get(application=self.app)
+        self.assertIsNone(notice.seen_at)
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("admin:hub_application_notices"))
+        self.assertContains(page, self.app.name)
+        self.assertContains(page, "Fiche créée")
+        self.assertContains(page, "Paiement confirmé")
+        self.assertContains(page, "Publiée")
+        self.client.post(reverse("admin:hub_application_notices"))
+        notice.refresh_from_db()
+        self.assertIsNotNone(notice.seen_at)
+        self.assertNotContains(self.client.get(reverse("admin:index")), "console-notice-count")
     def test_repeated_verified_callback_is_idempotent(self):
         payment = self.payment()
         with patch("hub.payments.services.singpay_service.find_payment_by_reference", return_value=(True, self.remote())) as verify:
@@ -455,7 +512,7 @@ class PaymentTests(HubTestCase):
         with patch("hub.payments.services.singpay_service.find_payment_by_reference", return_value=(True, self.remote())):
             result = self.client.post(reverse("hub:singpay-callback"), data=body, content_type="application/json", HTTP_X_SIGNATURE=signature, HTTP_X_TIMESTAMP=timestamp)
         self.assertEqual(result.status_code, 200)
-        self.app.refresh_from_db(); self.assertEqual(self.app.status, Application.Status.REVIEW)
+        self.app.refresh_from_db(); self.assertEqual(self.app.status, Application.Status.DRAFT)
     def test_stale_signature_is_rejected(self):
         body = "{}"; timestamp = str(int(time.time()) - 1000)
         signature = hmac.new(b"test-webhook", (timestamp + body).encode(), hashlib.sha256).hexdigest()
@@ -487,11 +544,56 @@ class ManagedShowcaseTests(HubTestCase):
         self.assertNotContains(response, "Premier visuel")
 
     def test_settings_control_copy_sections_and_escape_text(self):
-        HubAppearance.objects.create(hero_title="<script>test</script>", showcase_enabled=False, discovery_enabled=False)
+        HubAppearance.objects.create(hero_title="<script>test</script>", site_name="Hub local", footer_lead="<b>Pied</b>", catalogue_title="Le catalogue local", support_email="aide@example.com", showcase_enabled=False, discovery_enabled=False)
         response = self.client.get("/")
         self.assertContains(response, "&lt;script&gt;test&lt;/script&gt;")
+        self.assertContains(response, "Hub local")
+        self.assertContains(response, "&lt;b&gt;Pied&lt;/b&gt;")
+        self.assertContains(response, "Le catalogue local")
+        self.assertContains(response, "mailto:aide@example.com")
         self.assertNotContains(response, 'id="hero-showcase"')
         self.assertEqual(response.context["discovery_rails"], [])
+
+    def test_directory_cards_open_the_matching_catalogue(self):
+        commerce = Category.objects.get(slug="commerce")
+        Application.objects.create(name="Boutique test", slug="boutique-test", category=commerce, description="Une boutique.", website_url="https://example.com", is_admin_added=True, status=Application.Status.PUBLISHED)
+        home = self.client.get("/")
+        self.assertContains(home, 'href="/?categorie=commerce#applications"')
+        self.assertContains(home, 'href="/?categorie=administration#applications"')
+        self.assertContains(home, ">Administration</span>")
+        self.assertNotContains(home, ">Communauté</span>")
+        filtered = self.client.get("/", {"categorie": "commerce"})
+        self.assertEqual(filtered.context["selected_category"], "commerce")
+        self.assertContains(filtered, "Boutique test")
+        self.assertNotContains(filtered, "Application externe")
+        hidden = CatalogueFilter.objects.get(label="Administration")
+        hidden.is_active = False
+        hidden.save()
+        self.assertNotContains(self.client.get("/"), ">Administration</span>")
+
+    def test_admin_adds_and_retires_a_directory_filter(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("admin:hub_cataloguefilter_add"), {"label": "Éducation", "category": self.category.pk, "icon": "star", "tone": "gold", "order": 8, "is_active": "on", "_save": "Enregistrer"})
+        self.assertEqual(response.status_code, 302)
+        self.assertContains(self.client.get("/"), 'href="/?categorie=productivite#applications"')
+        created = CatalogueFilter.objects.get(label="Éducation")
+        response = self.client.post(reverse("admin:hub_cataloguefilter_change", args=[created.pk]), {"label": "Éducation", "category": self.category.pk, "icon": "star", "tone": "gold", "order": 8, "_save": "Enregistrer"})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(CatalogueFilter.objects.get(pk=created.pk).is_active)
+        self.assertNotContains(self.client.get("/"), ">Éducation</span>")
+
+    def test_logo_and_hero_slides_rotate_from_hub_settings(self):
+        appearance = HubAppearance.objects.create(logo="editorial/logo.webp")
+        HeroSlide.objects.create(appearance=appearance, image="editorial/a.webp", alt="Libreville", order=1)
+        HeroSlide.objects.create(appearance=appearance, image="editorial/b.webp", alt="Marché caché", order=0, is_active=False)
+        HeroSlide.objects.create(appearance=appearance, image="editorial/c.webp", alt="Côte", order=2)
+        page = self.client.get("/")
+        self.assertContains(page, 'class="brand-logo"')
+        self.assertContains(page, "editorial/logo.webp")
+        self.assertContains(page, "Libreville")
+        self.assertContains(page, "Côte")
+        self.assertNotContains(page, "Marché caché")
+        self.assertContains(page, "data-hero-next")
 
     def test_admin_uploads_hero_slide(self):
         self.client.force_login(self.admin)
@@ -529,3 +631,29 @@ class ManagedShowcaseTests(HubTestCase):
         self.assertEqual(payment.status, Payment.Status.SUCCESS)
         app.refresh_from_db()
         self.assertTrue(app.paid)
+        self.assertEqual((payment.valid_until - payment.verified_at).days, 365)
+
+    def test_expired_subscription_renews_at_the_current_annual_price(self):
+        HubAppearance.objects.create(submission_fee=2500)
+        payment = self.payment(status=Payment.Status.SUCCESS, verified_at=timezone.now())
+        Payment.objects.filter(pk=payment.pk).update(valid_until=timezone.now() - timedelta(days=1))
+        self.assertFalse(Application.objects.get(pk=self.app.pk).paid)
+        with patch("hub.payments.services.singpay_service.init_payment", return_value=(True, {"payment_url": "https://gateway.singpay.ga/payment/renewal", "transaction_id": "provider-renewal"})) as init:
+            renewed = start_checkout(self.app, self.user)
+        self.assertNotEqual(renewed.pk, payment.pk)
+        self.assertEqual(renewed.amount, 2500)
+        self.assertEqual(init.call_args.kwargs["amount"], 2500)
+        self.assertEqual(Application.objects.get(pk=self.app.pk).fee_amount, 2500)
+
+    def test_payment_screen_sets_the_annual_fee(self):
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("admin:hub_payment_changelist"))
+        self.assertContains(page, "Tarif annuel")
+        self.assertContains(page, 'value="2500"')
+        refused = self.client.post(reverse("admin:hub_payment_changelist"), {"submission_fee": "0", "set_submission_fee": "1"})
+        self.assertEqual(refused.status_code, 302)
+        self.assertFalse(HubAppearance.objects.exists())
+        saved = self.client.post(reverse("admin:hub_payment_changelist"), {"submission_fee": "1800", "set_submission_fee": "1"})
+        self.assertEqual(saved.status_code, 302)
+        self.assertEqual(HubAppearance.objects.get().submission_fee, 1800)
+        self.assertEqual(self.client.get("/").context["submission_fee"], 1800)

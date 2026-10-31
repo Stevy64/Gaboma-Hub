@@ -149,7 +149,7 @@ class SubmissionWorkflowTests(TestCase):
             'status': 'success', 'transaction_id': 'provider-test-unique', 'raw': {'currency': 'XAF'}})
         self.client.post(self.url, {'action': 'verify', 'payment_id': self.payment.pk})
         self.app.refresh_from_db()
-        self.assertEqual(self.app.status, 'review')
+        self.assertEqual(self.app.status, 'draft')
         self.assertTrue(self.app.paid)
         self.client.post(self.url, {'action': 'publish'})
         self.app.refresh_from_db()
@@ -182,7 +182,7 @@ class ManualPaymentTests(SubmissionWorkflowTests):
         self.assertEqual(self.payment.status, 'success')
         self.assertEqual(self.payment.manual_confirmed_by, self.admin)
         self.assertEqual(self.payment.manual_reference, 'RECU-001')
-        self.assertEqual(self.app.status, 'review')
+        self.assertEqual(self.app.status, 'draft')
         self.assertEqual(self.app.payments.count(), 1)
         self.assertGreaterEqual(LogEntry.objects.count(), 2)
         self.client.post(self.url, {'action':'publish'})
@@ -232,6 +232,37 @@ class ManualPaymentTests(SubmissionWorkflowTests):
         self.assertContains(response,'Test app')
         self.assertEqual(response.context['page'].paginator.per_page,24)
         self.assertContains(response,'Filtres et affichage')
+
+    def test_lists_page_a_hundred_and_bulk_actions_stay_inside_the_filter(self):
+        from hub.models import Application
+        kept = Application.objects.create(name='Keep me', description='Stable.', slug='keep-me', category=self.app.category, status='published', is_admin_added=True)
+        free = Application.objects.create(name='Ready', description='Prête.', slug='ready-app', category=self.app.category, status='review', is_admin_added=True)
+        listing = self.client.get('/admin/hub/application/?per_page=100')
+        self.assertEqual(listing.context['cl'].list_per_page, 100)
+        self.assertContains(listing, 'id="action-toggle"')
+        self.assertContains(listing, 'select-across')
+        self.assertEqual(self.client.get('/admin/hub/application/?per_page=9999').context['cl'].list_per_page, 50)
+        self.client.post('/admin/hub/application/suivi/?stage=draft', {'action': 'archive', 'select_across': '1'})
+        self.app.refresh_from_db(); kept.refresh_from_db(); free.refresh_from_db()
+        self.assertEqual(self.app.status, 'archived')
+        self.assertEqual(kept.status, 'published')
+        self.assertEqual(free.status, 'review')
+        self.app.status = 'draft'
+        self.app.save(update_fields=['status'])
+        self.client.post('/admin/hub/application/suivi/?stage=draft', {'action': 'archive', 'selected': [str(kept.pk)]})
+        kept.refresh_from_db(); self.app.refresh_from_db()
+        self.assertEqual(kept.status, 'published')
+        self.assertEqual(self.app.status, 'draft')
+        self.client.post('/admin/hub/application/suivi/', {'action': 'publish', 'selected': [str(self.app.pk), str(free.pk)]})
+        self.app.refresh_from_db(); free.refresh_from_db()
+        self.assertEqual(self.app.status, 'draft')
+        self.assertEqual(free.status, 'published')
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Permission
+        reader = get_user_model().objects.create_user('list-reader', is_staff=True)
+        reader.user_permissions.add(Permission.objects.get(codename='view_application'))
+        self.client.force_login(reader)
+        self.assertEqual(self.client.post('/admin/hub/application/suivi/', {'action': 'archive', 'selected': [str(free.pk)]}).status_code, 403)
 
 
 class HeroStatisticsTests(TestCase):

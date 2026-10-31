@@ -35,9 +35,6 @@ def confirm_manual_payment(app_id, actor, receipt, amount, note, confirmed):
             payment.manual_confirmed_by = actor
             payment.verification_message = 'Réception des fonds confirmée manuellement par un administrateur.'
             payment.save()
-            if app.status == Application.Status.DRAFT:
-                app.status = Application.Status.REVIEW
-                app.save(update_fields=['status', 'updated_at'])
             for item in (payment, app):
                 LogEntry.objects.log_actions(user_id=actor.pk,
                     queryset=type(item).objects.filter(pk=item.pk), action_flag=CHANGE,

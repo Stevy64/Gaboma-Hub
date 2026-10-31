@@ -22,29 +22,116 @@ from .payments.services import PaymentUnavailable, checkout_url_is_safe, normali
 from .visitors import visitor_stats, set_visitor_cookie
 from .payments.singpay import singpay_service
 
+CATALOGUE_PAGE_SIZE = 24
+RAIL_SIZE = 12
+LIST_DEFER = ("about", "moderation_note")
+
+def published_apps():
+    return Application.objects.filter(status=Application.Status.PUBLISHED).select_related("category").defer(*LIST_DEFER)
+
+def with_card_stats(apps):
+    visible = Q(reviews__is_visible=True)
+    return apps.annotate(
+        average_rating=Avg("reviews__rating", filter=visible),
+        review_count=Count("reviews", filter=visible))
+
+def catalogue_filters(request, apps):
+    query = request.GET.get("q", "").strip()[:120]
+    category = request.GET.get("categorie", "")[:60]
+    favorites_only = request.GET.get("vue") == "favoris"
+    sort = "rating" if request.GET.get("tri") == "rating" else "recent"
+    if query:
+        apps = apps.filter(Q(name__icontains=query) | Q(description__icontains=query) | Q(category__name__icontains=query))
+    if category:
+        apps = apps.filter(category__slug=category)
+    if favorites_only:
+        apps = apps.filter(favorite__user=request.user) if request.user.is_authenticated else apps.none()
+    return apps, query, category, favorites_only, sort
+
+def requested_page(request):
+    try:
+        number = int(request.GET.get("page") or 1)
+    except (TypeError, ValueError):
+        number = 1
+    return max(1, number)
+
+def catalogue_window(apps, request, sort):
+    """Une page du répertoire, sans noter toute la table."""
+    number = requested_page(request)
+    start = (number - 1) * CATALOGUE_PAGE_SIZE
+    stop = start + CATALOGUE_PAGE_SIZE + 1
+    if sort == "rating":
+        ordered = with_card_stats(apps).order_by("-average_rating", "-review_count", "name", "pk")
+        window = list(ordered[start:stop])
+        return window[:CATALOGUE_PAGE_SIZE], len(window) > CATALOGUE_PAGE_SIZE, number
+    ids = list(apps.order_by("-created_at", "pk").values_list("pk", flat=True)[start:stop])
+    has_next = len(ids) > CATALOGUE_PAGE_SIZE
+    ids = ids[:CATALOGUE_PAGE_SIZE]
+    rows = with_card_stats(published_apps().filter(pk__in=ids)) if ids else []
+    by_id = {app.pk: app for app in rows}
+    return [by_id[pk] for pk in ids if pk in by_id], has_next, number
+
+def favorite_ids_for(user, applications):
+    if not user.is_authenticated:
+        return set()
+    ids = [app.pk for app in applications]
+    if not ids:
+        return set()
+    return set(Favorite.objects.filter(user=user, application_id__in=ids).values_list("application_id", flat=True))
+
+def take_ids(apps, limit=RAIL_SIZE):
+    found = list(apps.order_by("-created_at", "-pk").values_list("pk", flat=True)[: limit + 1])
+    return found[:limit], len(found) > limit
+
+def discovery_rails_for(appearance):
+    base = published_apps()
+    available_ids, available_more = take_ids(base.exclude(website_url=""))
+    upcoming_ids, upcoming_more = take_ids(base.filter(website_url=""))
+    rated_ids = list(
+        Review.objects.filter(is_visible=True, application__status=Application.Status.PUBLISHED)
+        .values("application_id").annotate(score=Avg("rating"), votes=Count("id"))
+        .order_by("-score", "-votes", "application_id")
+        .values_list("application_id", flat=True)[: RAIL_SIZE + 1])
+    rated_more = len(rated_ids) > RAIL_SIZE
+    rated_ids = rated_ids[:RAIL_SIZE]
+    wanted = list(dict.fromkeys([*available_ids, *upcoming_ids, *rated_ids]))
+    by_id = {app.pk: app for app in with_card_stats(base.filter(pk__in=wanted))} if wanted else {}
+    def pack(rail_id, title, subtitle, icon, ids, more):
+        apps = [by_id[pk] for pk in ids if pk in by_id]
+        if not apps:
+            return None
+        return {"id": rail_id, "title": title, "subtitle": subtitle, "icon": icon, "apps": apps, "more": more}
+    rails = [pack("available-apps", appearance.rail_new_title or "Nouvellement ajoutées", appearance.rail_new_subtitle or "Des apps à ouvrir, dès maintenant.", "sparkles", available_ids, available_more)]
+    rails.append(pack("rated-apps", appearance.rail_rated_title or "Appréciées par la communauté", appearance.rail_rated_subtitle or "Le classement selon vos avis.", "star", rated_ids, rated_more))
+    rails.append(pack("upcoming-apps", appearance.rail_follow_title or "Les projets à suivre", appearance.rail_follow_subtitle or "Les projets dont le lien reste à compléter.", "clock", upcoming_ids, upcoming_more))
+    return [rail for rail in rails if rail], [by_id[pk] for pk in available_ids[:3] if pk in by_id]
+
+def catalogue_url(request, number, fragment=False):
+    params = request.GET.copy()
+    if number:
+        params["page"] = number
+    else:
+        params.pop("page", None)
+    base = reverse("hub:catalogue") if fragment else reverse("hub:home")
+    query = params.urlencode()
+    return f"{base}?{query}" if fragment else f"{'?' + query if query else ''}#applications"
+
+class CataloguePage:
+    def __init__(self, number, has_next):
+        self.number = number
+        self.has_next = has_next
+    def next_page_number(self):
+        return self.number + 1
+
 @require_GET
 def home(request):
     visitor_count, visitor_token = visitor_stats(request)
     available_count = Application.objects.filter(status=Application.Status.PUBLISHED).exclude(website_url="").count()
     appearance = request.hub_appearance = HubAppearance.current()
-    apps = Application.objects.filter(status=Application.Status.PUBLISHED).select_related("category").annotate(
-        average_rating=Avg("reviews__rating", filter=Q(reviews__is_visible=True)),
-        review_count=Count("reviews", filter=Q(reviews__is_visible=True)))
-    query = request.GET.get("q", "").strip()[:120]
-    category = request.GET.get("categorie", "")[:60]
-    favorites_only = request.GET.get("vue") == "favoris"
+    apps, query, category, favorites_only, sort = catalogue_filters(request, published_apps())
     spotlight, discovery_rails = [], []
-    if not query and not category and not favorites_only:
-        available = list(apps.exclude(website_url="").order_by("-created_at")[:8])
-        spotlight = available[:3]
-        discovery_rails = [
-            {"id": "available-apps", "title": "Nouvellement ajoutées", "subtitle": "Des apps à ouvrir, dès maintenant.", "icon": "sparkles", "apps": available},
-            {"id": "upcoming-apps", "title": "Les projets à suivre", "subtitle": "Les projets dont le lien reste à compléter.", "icon": "clock", "apps": list(apps.filter(website_url="").order_by("-created_at")[:8])},
-        ]
-        rated_apps = list(apps.filter(review_count__gt=0).order_by("-average_rating", "-review_count")[:8])
-        if rated_apps:
-            discovery_rails.insert(1, {"id": "rated-apps", "title": "Appréciées par la communauté", "subtitle": "Le classement selon vos avis.", "icon": "star", "apps": rated_apps})
-    sort = request.GET.get("tri", "recent")
+    if not query and not category and not favorites_only and appearance.discovery_enabled:
+        discovery_rails, spotlight = discovery_rails_for(appearance)
     layout = request.GET.get("affichage")
     if layout in {"grid", "list"}:
         request.session["catalogue_layout"] = layout
@@ -58,19 +145,27 @@ def home(request):
     now = timezone.now()
     ads = list(Advertisement.objects.filter(is_active=True).exclude(image="").filter(
         Q(starts_at__isnull=True) | Q(starts_at__lte=now)).filter(Q(ends_at__isnull=True) | Q(ends_at__gt=now)))
-    favorites = set(Favorite.objects.filter(user=request.user).values_list("application_id", flat=True)) if request.user.is_authenticated else set()
-    if query: apps = apps.filter(Q(name__icontains=query) | Q(description__icontains=query) | Q(category__name__icontains=query))
-    if category: apps = apps.filter(category__slug=category)
-    if favorites_only: apps = apps.filter(pk__in=favorites)
-    total = apps.count()
-    apps = apps.order_by("-average_rating", "-review_count", "name") if sort == "rating" else apps.order_by("-created_at", "name")
-    response = render(request, "hub/home.html", {"visitor_count": visitor_count, "available_count": available_count,"applications": apps, "total": total, "favorite_ids": favorites,
+    applications, has_next, number = catalogue_window(apps, request, sort)
+    catalogue_page = CataloguePage(number, has_next)
+    next_number = catalogue_page.next_page_number() if has_next else None
+    shown = [app for rail in discovery_rails for app in rail["apps"]] + applications
+    response = render(request, "hub/home.html", {"visitor_count": visitor_count, "available_count": available_count,"applications": applications, "catalogue_page": catalogue_page, "catalogue_next": catalogue_url(request, next_number, fragment=True) if next_number else "", "catalogue_more": catalogue_url(request, next_number) if next_number else "", "total": apps.count(), "favorite_ids": favorite_ids_for(request.user, shown),
         "query": query, "selected_category": category, "favorites_only": favorites_only, "categories": Category.objects.all(), "spotlight": spotlight, "sort": sort,
-        "layout": layout, "layout_urls": layout_urls, "appearance": appearance, "discovery_rails": discovery_rails if appearance.discovery_enabled else [],
+        "layout": layout, "layout_urls": layout_urls, "appearance": appearance, "discovery_rails": discovery_rails,
+        "hero_slides": list(appearance.slides.filter(is_active=True)) if appearance.pk else [],
         "showcase_ads": [ad for ad in ads if ad.placement == Advertisement.Placement.HERO],
         "discovery_ads": [ad for ad in ads if ad.placement == Advertisement.Placement.DISCOVERY],
         "catalogue_ads": [ad for ad in ads if ad.placement == Advertisement.Placement.CATALOGUE]})
     return set_visitor_cookie(response, visitor_token)
+
+@require_GET
+def catalogue(request):
+    apps, _query, _category, _favorites_only, sort = catalogue_filters(request, published_apps())
+    applications, has_next, number = catalogue_window(apps, request, sort)
+    next_number = number + 1 if has_next else None
+    return render(request, "hub/_catalogue_page.html", {
+        "applications": applications, "favorite_ids": favorite_ids_for(request.user, applications),
+        "catalogue_next": catalogue_url(request, next_number, fragment=True) if next_number else ""})
 
 @require_GET
 def detail(request, slug):
@@ -118,6 +213,8 @@ def toggle_favorite(request, public_id):
     app = get_object_or_404(Application, public_id=public_id, status=Application.Status.PUBLISHED)
     favorite, created = Favorite.objects.get_or_create(user=request.user, application=app)
     if not created: favorite.delete()
+    if request.headers.get("X-Requested-With") == "fetch":
+        return JsonResponse({"liked": created})
     next_url = request.POST.get("next", reverse("hub:home"))
     if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()): next_url = reverse("hub:home")
     return redirect(next_url)
@@ -160,6 +257,21 @@ def submission(request, public_id):
     return render(request, "hub/submission.html", {"application": app, "payments": app.payments.all(), "paid": app.paid, "singpay_ready": singpay_service.is_configured})
 
 @login_required
+@require_POST
+def confirm_submission(request, public_id):
+    app = get_object_or_404(Application, public_id=public_id, submitted_by=request.user)
+    if request.POST.get("confirm") != "yes":
+        messages.error(request, "Cochez la confirmation après avoir relu toutes les informations.")
+        return redirect("hub:submission", public_id=app.public_id)
+    try:
+        app.publish_by_creator()
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+        return redirect("hub:submission", public_id=app.public_id)
+    messages.success(request, "Votre application est publiée sur le Hub.")
+    return redirect(f"{reverse('hub:submission', args=[app.public_id])}?published=1")
+
+@login_required
 def edit_submission(request, public_id):
     app = get_object_or_404(Application, public_id=public_id, submitted_by=request.user, status__in=[Application.Status.DRAFT, Application.Status.REJECTED])
     if app.payments.filter(status=Payment.Status.PENDING).exists():
@@ -168,10 +280,10 @@ def edit_submission(request, public_id):
     form = ApplicationForm(request.POST or None, request.FILES or None, instance=app)
     if request.method == "POST" and form.is_valid():
         app = form.save(commit=False)
-        app.status = Application.Status.REVIEW if app.paid else Application.Status.DRAFT
+        app.status = Application.Status.DRAFT
         app.moderation_note = ""
         app.save()
-        messages.success(request, "Fiche mise à jour. Une fiche déjà payée est renvoyée en validation sans nouveau paiement.")
+        messages.success(request, "Fiche mise à jour. Relisez-la puis confirmez la publication." if app.paid else "Fiche mise à jour.")
         return redirect("hub:submission", public_id=app.public_id)
     return render(request, "hub/submit.html", {"form": form, "editing": True, "application": app, "submission_fee": app.fee_amount})
 

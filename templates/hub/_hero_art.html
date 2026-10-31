@@ -1,9 +1,6 @@
 {% load hub_tags %}
-<div class="hub-hero-art" aria-hidden="true">
- <div class="hub-orbit orbit-one"></div><div class="hub-orbit orbit-two"></div>
- <div class="hub-art-core">{% ui_icon 'grid' %}<span>gaboma hub<span class="art-dot">.</span></span><small>Vos apps, un seul endroit.</small></div>
- <div class="hub-art-tile art-commerce">{% ui_icon 'wallet' %}<span>Commerce</span></div>
- <div class="hub-art-tile art-services">{% ui_icon 'user' %}<span>Services</span></div>
- <div class="hub-art-tile art-discover">{% ui_icon 'sparkles' %}<span>Découvertes</span></div>
- <div class="hub-art-tile art-community">{% ui_icon 'message' %}<span>Communauté</span></div>
+<div class="hub-hero-art{% if directory_filters|length > 4 %} tiles-many{% endif %}">
+ <div class="hub-orbit orbit-one" aria-hidden="true"></div><div class="hub-orbit orbit-two" aria-hidden="true"></div>
+ <div class="hub-art-core" aria-hidden="true">{% ui_icon 'grid' %}<span>gaboma hub<span class="art-dot">.</span></span><small>{{ appearance.art_caption|default:"Vos apps, un seul endroit." }}</small></div>
+ {% for item in directory_filters %}<a class="hub-art-tile tone-{{ item.tone }}" href="/?categorie={{ item.category.slug }}#applications">{% ui_icon item.icon %}<span>{{ item.label }}</span></a>{% endfor %}
 </div>

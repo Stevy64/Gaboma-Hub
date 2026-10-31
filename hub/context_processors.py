@@ -1,4 +1,4 @@
-from .models import HubAppearance
+from .models import CatalogueFilter, HubAppearance
 
 def hub_context(request):
     sections = {
@@ -20,4 +20,5 @@ def hub_context(request):
     }
     name = getattr(request.resolver_match, "url_name", "")
     appearance = getattr(request, "hub_appearance", None) or HubAppearance.current()
-    return {"appearance": appearance, "submission_fee": appearance.submission_fee, "page_section": sections.get(name)}
+    filters = CatalogueFilter.objects.filter(is_active=True).select_related("category")
+    return {"appearance": appearance, "submission_fee": appearance.submission_fee, "page_section": sections.get(name), "directory_filters": filters}

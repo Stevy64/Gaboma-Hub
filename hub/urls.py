@@ -3,6 +3,7 @@ from . import views
 app_name = "hub"
 urlpatterns = [
     path("", views.home, name="home"),
+    path("repertoire/", views.catalogue, name="catalogue"),
     path("applications/<slug:slug>/", views.detail, name="detail"),
     path("applications/<slug:slug>/avis/", views.save_review, name="review"),
     path("applications/<slug:slug>/avis/supprimer/", views.delete_review, name="delete-review"),
@@ -11,6 +12,7 @@ urlpatterns = [
     path("mon-espace/", views.dashboard, name="dashboard"),
     path("soumettre/", views.submit_application, name="submit"),
     path("mes-applications/<uuid:public_id>/", views.submission, name="submission"),
+    path("mes-applications/<uuid:public_id>/confirmer/", views.confirm_submission, name="confirm"),
     path("mes-applications/<uuid:public_id>/modifier/", views.edit_submission, name="edit"),
     path("mes-applications/<uuid:public_id>/payer/", views.checkout, name="checkout"),
     path("paiements/<uuid:public_id>/retour/", views.payment_return, name="payment-return"),

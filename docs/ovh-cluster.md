@@ -219,29 +219,85 @@ kubectl -n hub logs deploy/hub-web -c gunicorn
 
 ## 9. Mettre à jour
 
-### Si vous aviez choisi A
+On refait seulement cette étape à chaque publication. Les étapes 1 à 8 ne se rejouent pas. Le Secret `hub`, la base `hub` et le disque `hub-media` restent en place.
 
-Quand le job Actions est vert :
+La lettre notée à l'étape 4 ne change pas d'une publication à l'autre.
+
+### 9.1 Récupérer le code
+
+Sur le VPS :
 
 ```bash
 cd /srv/hub
 git pull --ff-only
-hub-deploy
-curl -fsS https://hub.gabomazone.com/health/ready/
 ```
 
-Pour revenir à un commit, remplacez `:main` par le SHA du job, dans le Job et dans le conteneur gunicorn, puis appliquez les manifests.
+Ça a marché si git affiche `Already up to date` ou `Fast-forward`. S'il affiche `Not possible to fast-forward`, ne forcez rien : le dossier `/srv/hub` a été modifié à la main.
 
-### Si vous aviez choisi B
+### 9.2 Image
+
+#### Choix A
+
+Attendez que l'onglet Actions soit vert. L'étiquette `main` de `ghcr.io/stevy64/gaboma-hub` est alors prête. Rien ne se construit sur le VPS.
+
+#### Choix B
 
 ```bash
 cd /srv/hub
-git pull --ff-only
 sudo docker build -t gaboma-hub:1 .
 sudo docker save gaboma-hub:1 | sudo k3s ctr images import -
+sudo k3s ctr images ls | grep gaboma-hub
+```
+
+Ça a marché si `grep` affiche `docker.io/library/gaboma-hub:1`.
+
+### 9.3 Appliquer
+
+Le script attend Redis, joue la migration, puis redémarre le site. Si la migration échoue, il s'arrête et le site déjà en service reste.
+
+Choix A :
+
+```bash
+hub-deploy
+```
+
+Choix B :
+
+```bash
 hub-deploy local
+```
+
+Si la commande s'arrête sur le Job :
+
+```bash
+kubectl -n hub logs job/hub-migrate
+```
+
+Corrigez la cause, puis relancez la même commande `hub-deploy`. Ne supprimez pas le disque pour recommencer.
+
+Ça a marché si la commande se termine sans erreur.
+
+### 9.4 Vérifier
+
+```bash
+kubectl -n hub rollout status deployment/hub-web
 curl -fsS https://hub.gabomazone.com/health/ready/
 ```
+
+Ça a marché si le rollout affiche `successfully rolled out` et si `curl` affiche `"status": "ok"`.
+
+Ouvrez `https://hub.gabomazone.com/` puis `https://hub.gabomazone.com/admin/`.
+
+### 9.5 Revenir à la version d'avant
+
+Le SHA est celui du job Actions précédent. Ceci remet le site sur cette image. Cela ne défait pas une migration déjà jouée : si le schéma a changé, restaurez la sauvegarde de la base pendant une fenêtre de maintenance.
+
+```bash
+kubectl -n hub set image deployment/hub-web gunicorn=ghcr.io/stevy64/gaboma-hub:SHA
+kubectl -n hub rollout status deployment/hub-web
+```
+
+Le prochain `hub-deploy` reprend l'étiquette `main`, parce que les manifests disent `:main`. Pour rester sur l'ancienne version, ne relancez pas `hub-deploy` tant que `main` n'est pas revenu au bon commit.
 
 ## À ne pas faire
 

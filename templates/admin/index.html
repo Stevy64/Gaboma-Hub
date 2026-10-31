@@ -3,12 +3,224 @@
 {% block coltype %}colMS console-dashboard{% endblock %}
 {% block nav-sidebar %}{% include 'admin/_console_sidebar.html' %}{% endblock %}
 {% block content %}
+{% console_overview as ov %}
 {% console_metrics as metrics %}
-<section class="console-welcome"><span>VOTRE ESPACE DE PILOTAGE</span><h1>Bonjour {{ user.get_short_name|default:user.username }}.</h1><p>Faites grandir le catalogue, accompagnez les créateurs et donnez de la visibilité aux apps d’ici.</p><a href="{% url 'hub:home' %}">Voir le Hub ↗</a></section>
-<div class="console-metrics">{% for item in metrics %}<a href="{{ item.url }}"><span class="metric-ico">{% ui_icon item.icon %}</span><span>{{ item.label }}</span><strong>{{ item.value }}</strong><small>{{ item.help }} →</small></a>{% endfor %}</div>
-{% if perms.hub.view_application %}<a class="flow-entry" href="{% url 'admin:hub_application_workflow' %}"><span>SOUMISSIONS & PAIEMENTS</span><strong>Chaque dossier, de la fiche à la publication →</strong><small>Contrôler les paiements, accompagner les créateurs et valider les apps.</small></a>{% endif %}
-<h2 class="console-section-title">Gérer mon Hub</h2>
-<div id="content-main" class="console-manage">{% for app in app_list reversed %}<section class="console-group"><h3>{% if app.app_label == 'hub' %}Catalogue & activité{% else %}Accès & utilisateurs{% endif %}</h3><div class="console-resource-grid">{% for model in app.models %}<article class="console-resource"><div><span class="resource-ico">{% model_icon model.object_name %}</span><h4>{{ model.name }}</h4></div><div class="console-resource-actions">{% if model.admin_url %}<a href="{{ model.admin_url }}">Gérer →</a>{% endif %}{% if model.add_url %}<a href="{{ model.add_url }}" aria-label="Ajouter : {{ model.name }}">+ Ajouter</a>{% endif %}</div></article>{% endfor %}</div></section>{% endfor %}</div>
+<header class="console-top">
+  <div class="console-top-copy">
+    <p class="console-kicker">Espace de pilotage</p>
+    <h1>Bonjour {{ user.get_short_name|default:user.username }}.</h1>
+    <p class="console-lead">Suivez les soumissions, contrôlez les encaissements Paiement Mobile et pilotez la visibilité des créateurs gabonais.</p>
+  </div>
+  <div class="console-top-cta">
+    {% if ov.can_apps %}<a class="console-btn console-btn-primary" href="{% url 'admin:hub_application_workflow' %}">{% ui_icon 'check' %}<span>Suivi des dossiers</span></a>{% endif %}
+    {% if ov.can_pay %}<a class="console-btn console-btn-dark" href="{% url 'admin:hub_payment_changelist' %}">{% ui_icon 'wallet' %}<span>Paiements</span></a>{% endif %}
+    <a class="console-btn console-btn-ghost" href="{% url 'hub:home' %}">{% ui_icon 'external' %}<span>Voir le Hub</span></a>
+  </div>
+</header>
+
+{% if metrics %}
+<section class="console-metrics" aria-label="Indicateurs clés">
+  {% for item in metrics %}
+  <a class="console-metric-card" href="{{ item.url }}">
+    <span class="metric-ico">{% ui_icon item.icon %}</span>
+    <span class="metric-label">{{ item.label }}</span>
+    <strong data-count="{{ item.value }}">{{ item.value }}</strong>
+    <small>{{ item.help }} →</small>
+  </a>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if ov.can_apps or ov.can_pay or ov.can_settings or ov.can_filters %}
+<section class="console-hero-actions" aria-label="Actions prioritaires">
+  {% if ov.can_apps %}
+  <a class="console-hero-card is-priority" href="{% url 'admin:hub_application_notices' %}">
+    <div class="console-hero-card-top">
+      <span class="console-pill is-blue">À lire</span>
+      <span class="console-hero-ico">{% ui_icon 'bell' %}</span>
+    </div>
+    <span class="console-hero-count" data-count="{{ ov.notices_unread }}">{{ ov.notices_unread }}</span>
+    <h2>Nouvelles publications</h2>
+    <p>Applications confirmées par leurs créateurs, avec l'heure de chaque étape.</p>
+    <span class="console-hero-go">Voir les notifications {% ui_icon 'arrow' %}</span>
+  </a>
+  {% endif %}
+  {% if ov.can_pay %}
+  <a class="console-hero-card is-finance" href="{% url 'admin:hub_payment_changelist' %}">
+    <div class="console-hero-card-top">
+      <span class="console-pill is-ok">Trésorerie</span>
+      <span class="console-hero-ico">{% ui_icon 'wallet' %}</span>
+    </div>
+    <span class="console-hero-count">{{ ov.revenue|fcfa }}</span>
+    <h2>Paiements &amp; encaissements</h2>
+    <p>{{ ov.success_count }} confirmé{{ ov.success_count|pluralize }} · {{ ov.pending_count }} en attente ({{ ov.pending_amount|fcfa }}).</p>
+    <span class="console-hero-go">Gérer la comptabilité {% ui_icon 'arrow' %}</span>
+  </a>
+  {% endif %}
+  {% if ov.can_filters %}
+  <a class="console-hero-card" href="{% url 'admin:hub_cataloguefilter_changelist' %}">
+    <div class="console-hero-card-top">
+      <span class="console-pill">Accueil</span>
+      <span class="console-hero-ico">{% ui_icon 'filter' %}</span>
+    </div>
+    <span class="console-hero-count">{% ui_icon 'sparkles' %}</span>
+    <h2>Filtres &amp; vitrine</h2>
+    <p>Organiser les tuiles d’accueil, les catégories et les campagnes en vitrine.</p>
+    <span class="console-hero-go">Personnaliser {% ui_icon 'arrow' %}</span>
+  </a>
+  {% endif %}
+  {% if ov.can_settings %}
+  <a class="console-hero-card" href="{{ ov.settings_url }}">
+    <div class="console-hero-card-top">
+      <span class="console-pill">Configuration</span>
+      <span class="console-hero-ico">{% ui_icon 'palette' %}</span>
+    </div>
+    <span class="console-hero-count">HUB</span>
+    <h2>Paramètres du Hub</h2>
+    <p>Identité, textes d’accueil, tarif de soumission, contacts et réseaux.</p>
+    <span class="console-hero-go">Configurer {% ui_icon 'arrow' %}</span>
+  </a>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if ov.can_apps or ov.can_pay %}
+<div class="console-charts">
+  {% if ov.can_apps %}
+  <section class="console-panel">
+    <div class="console-panel-head">
+      <div>
+        <p class="console-panel-kicker">Activité · 14 jours</p>
+        <h3>Nouvelles applications</h3>
+      </div>
+      <a class="console-panel-link" href="{% url 'admin:hub_application_changelist' %}">Catalogue {% ui_icon 'arrow' %}</a>
+    </div>
+    <div class="console-bars" role="img" aria-label="Dépôts des 14 derniers jours">
+      {% for v in ov.chart_apps %}
+      <div class="console-bar" style="--i:{{ forloop.counter0 }}" title="{{ v.label }} : {{ v.n }} dépôt{{ v.n|pluralize }}">
+        <span class="console-bar-tip">{{ v.n }} · {{ v.label }}</span>
+        <div class="console-bar-track"><div class="console-bar-fill" style="--h:{{ v.pct }}%"></div></div>
+        <span class="console-bar-val">{{ v.n }}</span>
+        <span class="console-bar-lab">{{ v.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% if ov.can_pay %}
+  <section class="console-panel">
+    <div class="console-panel-head">
+      <div>
+        <p class="console-panel-kicker">Trésorerie · 14 jours</p>
+        <h3>Encaissements confirmés</h3>
+      </div>
+      <a class="console-panel-link" href="{% url 'admin:hub_payment_changelist' %}">Transactions {% ui_icon 'arrow' %}</a>
+    </div>
+    <div class="console-bars console-bars-alt" role="img" aria-label="Paiements confirmés des 14 derniers jours">
+      {% for row in ov.chart_payments %}
+      <div class="console-bar" style="--i:{{ forloop.counter0 }}" title="{{ row.label }} : {{ row.t|fcfa }}">
+        <span class="console-bar-tip">{{ row.t|fcfa }} · {{ row.label }}</span>
+        <div class="console-bar-track"><div class="console-bar-fill" style="--h:{{ row.pct }}%"></div></div>
+        <span class="console-bar-val">{{ row.n }}</span>
+        <span class="console-bar-lab">{{ row.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="console-main-grid">
+  {% if ov.can_apps %}
+  <section class="console-panel">
+    <div class="console-panel-head">
+      <div>
+        <p class="console-panel-kicker">Répertoire &amp; dépôts</p>
+        <h3>Dernières applications</h3>
+      </div>
+      <a class="console-panel-link" href="{% url 'admin:hub_application_workflow' %}">Tout suivre {% ui_icon 'arrow' %}</a>
+    </div>
+    <ul class="console-list">
+      {% for app in ov.recent_apps %}
+      <li>
+        <a class="console-list-item" href="{% url 'admin:hub_application_workflow_detail' app.pk %}">
+          <span class="console-list-avatar" aria-hidden="true">{{ app.name|slice:":1"|upper }}</span>
+          <span class="console-list-copy">
+            <strong class="console-list-title">{{ app.name }}</strong>
+            <small class="console-list-sub">{{ app.category }} · {{ app.submitted_by|default:"Administration" }} · {{ app.created_at|date:"d/m/Y" }}</small>
+          </span>
+          <span class="console-pill {% if app.status == 'published' %}is-ok{% elif app.status == 'review' %}is-blue{% elif app.status == 'rejected' %}is-danger{% else %}is-warn{% endif %}">{{ app.get_status_display }}</span>
+        </a>
+      </li>
+      {% empty %}
+      <li class="console-empty-row">Aucune application enregistrée.</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section class="console-panel">
+    <div class="console-panel-head">
+      <div>
+        <p class="console-panel-kicker">Journal d’audit</p>
+        <h3>Activité récente</h3>
+      </div>
+      {% if ov.can_pay %}<a class="console-panel-link" href="{% url 'admin:hub_paymentevent_changelist' %}">Webhooks {% ui_icon 'arrow' %}</a>{% endif %}
+    </div>
+    <ul class="console-feed">
+      {% for log in ov.recent_logs %}
+      <li class="console-feed-item">
+        <span class="console-feed-dot" aria-hidden="true"></span>
+        <div>
+          <div class="console-feed-top">
+            <span class="console-feed-actor">{{ log.user|default:"Système" }}</span>
+            {% if log.content_type %}<span class="console-feed-model">{{ log.content_type.name|capfirst }}</span>{% endif %}
+          </div>
+          <p class="console-feed-summary">
+            {% if log.get_admin_url %}<a href="{{ log.get_admin_url }}"><strong>{{ log.object_repr }}</strong></a>{% else %}<strong>{{ log.object_repr }}</strong>{% endif %}
+            — {{ log.get_change_message|default:"Mise à jour" }}
+          </p>
+        </div>
+        <span class="console-feed-time">{{ log.action_time|date:"d/m H:i" }}</span>
+      </li>
+      {% empty %}
+      <li class="console-empty-row">Aucune action administrative récente.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
+<div class="console-section-head">
+  <div>
+    <p class="console-panel-kicker">Modules</p>
+    <h2 class="console-section-title">Gérer mon Hub</h2>
+  </div>
+</div>
+<div id="content-main" class="console-manage">
+  {% for app in app_list reversed %}
+  <section class="console-group">
+    <h3>{% if app.app_label == 'hub' %}Catalogue &amp; activité{% else %}Accès &amp; utilisateurs{% endif %}</h3>
+    <div class="console-resource-grid">
+      {% for model in app.models %}
+      <article class="console-resource">
+        <div class="console-resource-top">
+          <span class="resource-ico">{% model_icon model.object_name %}</span>
+          <div>
+            <h4>{{ model.name }}</h4>
+            <small>{% if model.object_name == 'Application' %}Fiches, états et modération{% elif model.object_name == 'Payment' %}Transactions Paiement Mobile{% elif model.object_name == 'PaymentEvent' %}Journal des callbacks signés{% elif model.object_name == 'Review' %}Notes et avis utilisateurs{% elif model.object_name == 'Favorite' %}Coups de cœur enregistrés{% elif model.object_name == 'Category' %}Rubriques du catalogue{% elif model.object_name == 'CatalogueFilter' %}Tuiles filtrantes du Hero{% elif model.object_name == 'HubAppearance' %}Identité, textes et tarifs{% elif model.object_name == 'Advertisement' %}Bannières et carrousel Hero{% elif model.object_name == 'User' %}Comptes créateurs et staff{% elif model.object_name == 'Group' %}Rôles et permissions{% else %}Gestion des entrées{% endif %}</small>
+          </div>
+        </div>
+        <div class="console-resource-actions">
+          {% if model.admin_url %}<a class="console-resource-open" href="{{ model.admin_url }}">Ouvrir {% ui_icon 'arrow' %}</a>{% endif %}
+          {% if model.add_url %}<a class="console-resource-add" href="{{ model.add_url }}" aria-label="Ajouter : {{ model.name }}">+ Ajouter</a>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+</div>
 {% endblock %}
 
 {% block sidebar %}{% endblock %}

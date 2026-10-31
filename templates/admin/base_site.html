@@ -1,11 +1,22 @@
-{% extends "admin/base.html" %}{% load static %}
+{% extends "admin/base.html" %}{% load static hub_tags %}
 {% block title %}{{ title }} · Gaboma Hub{% endblock %}
 {% block bodyclass %}hub-console{% endblock %}
-{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'hub/admin-console.css' %}?v=20261030-console6"><link rel="icon" href="{% static 'hub/favicon.svg' %}">{% endblock %}
-{% block usertools %}{% if has_permission %}<div id="user-tools" class="console-account"><details><summary>Mon compte · {{ user.get_short_name|default:user.username }}</summary><div class="console-account-menu"><a href="{% url 'hub:home' %}">Voir le Hub ↗</a><a href="{% url 'admin:password_change' %}">Modifier mon mot de passe</a><form method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button type="submit">Se déconnecter</button></form></div></details>{% include "admin/color_theme_toggle.html" %}</div>{% endif %}{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'hub/motion.css' %}?v=20261030-heart2"><link rel="stylesheet" href="{% static 'hub/admin-console.css' %}?v=20261031-pay10"><link rel="icon" href="{% static 'hub/favicon.svg' %}">{% endblock %}
+{% block usertools %}{% if has_permission %}<div id="user-tools" class="console-account">{% if perms.hub.view_application %}{% unread_notice_count as notice_count %}<a class="console-notices" href="{% url 'admin:hub_application_notices' %}" aria-label="Notifications de publication{% if notice_count %}, {{ notice_count }} non lue{{ notice_count|pluralize }}{% endif %}">{% ui_icon 'bell' %}{% if notice_count %}<span class="console-notice-count">{{ notice_count }}</span>{% endif %}</a>{% endif %}<details><summary><span class="console-account-label">Mon compte</span><span class="console-account-name">{{ user.get_short_name|default:user.username }}</span></summary><div class="console-account-menu"><a href="{% url 'hub:home' %}">Voir le Hub ↗</a><a href="{% url 'admin:password_change' %}">Modifier mon mot de passe</a><form method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button type="submit">Se déconnecter</button></form></div></details>{% include "admin/color_theme_toggle.html" %}</div>{% endif %}{% endblock %}
 {% block branding %}<a class="console-brand" href="{% url 'admin:index' %}"><span class="console-mark">G</span><span><strong>gaboma hub.</strong><small>CONSOLE D’ADMINISTRATION</small></span></a>{% endblock %}
-{% block nav-global %}<button class="console-menu-toggle" type="button" aria-controls="console-sidebar" aria-expanded="false">☰ <span>Menu</span></button>{% if user.is_staff %}<nav class="console-shortcuts" aria-label="Administration"><a href="{% url 'admin:index' %}" {% if request.resolver_match.url_name == 'index' %}aria-current="page"{% endif %}>Accueil</a>{% if perms.hub.view_application %}<a href="{% url 'admin:hub_application_workflow' %}" {% if 'workflow' in request.resolver_match.url_name %}aria-current="page"{% endif %}>Suivi des soumissions</a>{% endif %}{% if perms.hub.view_payment %}<a href="{% url 'admin:hub_payment_changelist' %}">Paiements</a>{% endif %}</nav>{% endif %}{% endblock %}
+{% block nav-global %}<button class="console-menu-toggle" type="button" aria-controls="console-sidebar" aria-expanded="false" aria-label="Menu">☰ <span class="console-menu-label">Menu</span></button>{% if user.is_staff %}<nav class="console-shortcuts" aria-label="Administration"><a href="{% url 'admin:index' %}" {% if request.resolver_match.url_name == 'index' %}aria-current="page"{% endif %}>Accueil</a>{% if perms.hub.view_application %}<a href="{% url 'admin:hub_application_workflow' %}" {% if 'workflow' in request.resolver_match.url_name %}aria-current="page"{% endif %}>Suivi des soumissions</a>{% endif %}{% if perms.hub.view_payment %}<a href="{% url 'admin:hub_payment_changelist' %}">Paiements</a>{% endif %}</nav>{% endif %}{% endblock %}
 
 
 {% block nav-sidebar %}{% if has_permission %}{% include 'admin/_console_sidebar.html' %}{% endif %}{% endblock %}
-{% block extrabody %}{{ block.super }}<div class="console-progress" hidden><span></span></div><script src="{% static 'hub/admin-navigation.js' %}?v=20261030-console6" defer></script>{% endblock %}
+{% block extrabody %}{{ block.super }}<div class="console-progress" hidden><span></span></div>
+<div class="hub-loader" id="hub-loader" hidden><div class="hub-loader-mark"><span class="hub-loader-ring"></span><span class="hub-loader-ring hub-loader-ring-2"></span><span class="hub-loader-core"></span></div><p class="sr-only">Chargement</p></div>
+<div class="console-sheet" id="console-sheet" hidden>
+<button class="console-sheet-backdrop" type="button" data-sheet-close aria-label="Fermer"></button>
+<div class="console-sheet-card" role="dialog" aria-modal="true" aria-labelledby="console-sheet-title">
+<div class="console-sheet-grab" aria-hidden="true"></div>
+<div class="console-sheet-head"><div><p class="console-sheet-kicker" id="console-sheet-kicker">Détail</p><h2 id="console-sheet-title">—</h2></div><button class="console-sheet-x" type="button" data-sheet-close aria-label="Fermer">×</button></div>
+<div class="console-sheet-body" id="console-sheet-body"></div>
+<div class="console-sheet-actions" id="console-sheet-actions"></div>
+</div>
+</div>
+<script src="{% static 'hub/admin-navigation.js' %}?v=20261031-pay10" defer></script>{% endblock %}

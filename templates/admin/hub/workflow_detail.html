@@ -2,10 +2,121 @@
 {% block content_title %}{% endblock %}
 {% block extrastyle %}{{ block.super }}<script src="{% static 'hub/admin-workflow.js' %}" defer></script>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:hub_application_workflow' %}?{{ return_params }}">Suivi des soumissions</a> › {{ app.name }}</div>{% endblock %}
-{% block content %}<div class="flow-shell"><div class="flow-title"><h1>{{ app.name }}</h1><span class="flow-badge">{{ app.get_status_display }}</span></div>
-<ol class="flow-steps"><li class="done">✓ Fiche reçue<small>{{ app.created_at|date:"d/m/Y H:i" }}</small></li><li {% if paid %}class="done"{% endif %}>{% if paid %}✓{% else %}2.{% endif %} {% if app.is_admin_added %}Sans frais{% else %}Paiement{% endif %}<small>{% if paid %}Validé{% else %}À confirmer{% endif %}</small></li><li {% if app.status == 'published' %}class="done"{% endif %}>{% if app.status == 'published' %}✓{% else %}3.{% endif %} Publication<small>{{ app.get_status_display }}</small></li></ol>
-<div class="flow-detail-grid"><section class="flow-card"><h2>{% ui_icon 'text' %}La fiche</h2>{% if app.banner %}<img class="flow-banner" src="{{ app.banner.url }}" alt="Bannière de {{ app.name }}">{% endif %}<p><strong>{{ app.creator_name|default:app.submitted_by }}</strong> · {{ app.category }}</p><p>{{ app.description }}</p><div>{{ app.about|linebreaks }}</div>{% if app.website_url %}<a class="flow-button secondary" href="{{ app.website_url }}" target="_blank" rel="noopener noreferrer">Visiter l’application ↗</a>{% endif %}{% if can_edit %}<a class="flow-button secondary" href="{% url 'admin:hub_application_change' app.pk %}">Modifier la fiche</a>{% endif %}</section>
-<section class="flow-card"><h2>{% ui_icon 'wallet' %}Paiements</h2><p>Tarif du dossier : <strong>{{ app.fee_amount }} FCFA</strong></p>{% if app.is_admin_added %}<p>Ajout administratif sans frais.</p>{% endif %}{% for payment in payments %}<div class="flow-payment"><span class="flow-badge">{{ payment.get_status_display }}</span><p><strong>{{ payment.amount }} FCFA</strong> · {{ payment.created_at|date:"d/m/Y H:i" }}</p><code>{{ payment.reference }}</code><p>{{ payment.verification_message|payment_label }}</p>{% if payment.manual_reference %}<p><strong>Validation manuelle</strong> · {{ payment.manual_confirmed_by|default:"Compte supprimé" }}</p><p>Justificatif : {{ payment.manual_reference }}<br>{{ payment.manual_note }}</p>{% endif %}{% if payment.verified_at %}<p>Confirmé le {{ payment.verified_at|date:"d/m/Y H:i" }}</p>{% elif can_pay %}<form method="post" class="flow-action">{% csrf_token %}<input type="hidden" name="action" value="verify"><input type="hidden" name="payment_id" value="{{ payment.pk }}"><button type="submit">Vérifier et valider le paiement</button></form>{% endif %}</div>{% empty %}<p>Aucune tentative de paiement disponible, ou accès aux paiements non autorisé.</p>{% endfor %}<small>La vérification automatique interroge le prestataire. Vous pouvez aussi confirmer un encaissement contrôlé par vos soins.</small>
-{% if can_pay and not paid and app.status != 'archived' %}<details class="manual-panel" {% if manual_form.errors %}open{% endif %}><summary>Valider le paiement manuellement</summary><p>Utilisez cette option après avoir vérifié le reçu et l’encaissement, même si aucune tentative en ligne n’existe. Cette action sera enregistrée dans l’historique.</p><form method="post" class="flow-action">{% csrf_token %}<input type="hidden" name="action" value="manual">{{ manual_form.as_p }}<button type="submit">Confirmer la réception du paiement</button></form></details>{% endif %}</section>
-<section class="flow-card"><h2>{% ui_icon 'shield' %}Décision administrative</h2>{% if app.moderation_note %}<blockquote>{{ app.moderation_note }}</blockquote>{% endif %}{% if can_edit %}{% if app.status != 'published' and app.status != 'archived' %}<form method="post" class="flow-action">{% csrf_token %}<input type="hidden" name="action" value="publish"><button type="submit" {% if not paid %}disabled{% endif %}>Valider et publier l’application</button>{% if not paid %}<p>Confirmez le paiement avant de publier.</p>{% endif %}</form>{% endif %}<form method="post" class="flow-action">{% csrf_token %}<label for="decision-note">Motif / retour au créateur</label><textarea id="decision-note" name="note" required maxlength="2000" rows="4" placeholder="Expliquez précisément les modifications attendues…"></textarea><div class="flow-decisions"><button name="action" value="corrections" class="secondary">Demander des corrections</button><button name="action" value="archive" class="secondary">Archiver</button></div></form>{% else %}<p>Vous disposez d’un accès en lecture seule.</p>{% endif %}</section>
-<section class="flow-card"><h2>{% ui_icon 'clock' %}Historique du dossier</h2><p>Créé le {{ app.created_at|date:"d/m/Y H:i" }} par {{ app.submitted_by|default:"l’administration" }}.</p>{% if app.reviewed_at %}<p>Dernière décision : {{ app.reviewed_at|date:"d/m/Y H:i" }} · {{ app.reviewed_by }}</p>{% endif %}<ol class="flow-history">{% for event in history %}<li><strong>{{ event.action_time|date:"d/m/Y H:i" }} · {{ event.user }}</strong><p>{{ event.get_change_message }}</p></li>{% empty %}<li>Aucune action administrative enregistrée.</li>{% endfor %}</ol>{% if history.has_other_pages %}<nav class="flow-pagination" aria-label="Historique">{% if history.has_previous %}<a href="?{{ return_params }}&history_page={{ history.previous_page_number }}">Plus récents</a>{% endif %}<span>{{ history.number }} / {{ history.paginator.num_pages }}</span>{% if history.has_next %}<a href="?{{ return_params }}&history_page={{ history.next_page_number }}">Plus anciens</a>{% endif %}</nav>{% endif %}</section></div></div>{% endblock %}
+{% block content %}
+<div class="flow-shell">
+  <header class="console-top">
+    <div class="console-top-copy">
+      <p class="console-kicker">Dossier de soumission · {{ app.category }}</p>
+      <div class="flow-title">
+        <h1>{{ app.name }}</h1>
+        <span class="console-pill {% if app.status == 'published' %}is-ok{% elif app.status == 'review' %}is-blue{% elif app.status == 'rejected' %}is-danger{% elif app.status == 'archived' %}is-muted{% else %}is-warn{% endif %}">{{ app.get_status_display }}</span>
+      </div>
+      <p class="console-lead">Déposé par <strong>{{ app.creator_name|default:app.submitted_by|default:"l’administration" }}</strong> le {{ app.created_at|date:"d/m/Y à H:i" }}.</p>
+    </div>
+    <div class="console-top-cta">
+      <a class="console-btn console-btn-ghost" href="{% url 'admin:hub_application_workflow' %}?{{ return_params }}">{% ui_icon 'back' %}<span>Retour aux dossiers</span></a>
+      {% if app.website_url %}<a class="console-btn console-btn-ghost" href="{{ app.website_url }}" target="_blank" rel="noopener noreferrer">{% ui_icon 'external' %}<span>Visiter l’app</span></a>{% endif %}
+      {% if can_edit %}<a class="console-btn console-btn-primary" href="{% url 'admin:hub_application_change' app.pk %}">{% ui_icon 'edit' %}<span>Modifier la fiche</span></a>{% endif %}
+    </div>
+  </header>
+
+  <ol class="flow-steps">
+    <li class="done"><span class="flow-step-badge">✓</span><div><strong>Fiche reçue</strong><small>{{ app.created_at|date:"d/m/Y H:i" }}</small></div></li>
+    <li {% if paid %}class="done"{% endif %}><span class="flow-step-badge">{% if paid %}✓{% else %}2{% endif %}</span><div><strong>{% if app.is_admin_added %}Sans frais{% else %}Paiement{% endif %}</strong><small>{% if paid %}À jour{% if app.coverage_until %} jusqu'au {{ app.coverage_until|date:"d/m/Y" }}{% endif %}{% else %}À confirmer · {{ app.fee_amount }} FCFA / an{% endif %}</small></div></li>
+    <li {% if app.status == 'published' %}class="done"{% endif %}><span class="flow-step-badge">{% if app.status == 'published' %}✓{% else %}3{% endif %}</span><div><strong>Publication</strong><small>{{ app.get_status_display }}</small></div></li>
+  </ol>
+
+  <div class="flow-detail-grid">
+    <section class="flow-card">
+      <h2>{% ui_icon 'text' %}<span>La fiche</span></h2>
+      {% if app.banner %}<img class="flow-banner" src="{{ app.banner.url }}" alt="Bannière de {{ app.name }}">{% endif %}
+      <p><strong>{{ app.creator_name|default:app.submitted_by|default:"Administration" }}</strong> · {{ app.category }}{% if app.creator_city %} · {{ app.creator_city }}{% endif %}</p>
+      <p>{{ app.description }}</p>
+      {% if app.about %}<div class="flow-about">{{ app.about|linebreaks }}</div>{% endif %}
+      <div class="flow-card-actions">
+        {% if app.website_url %}<a class="flow-button secondary" href="{{ app.website_url }}" target="_blank" rel="noopener noreferrer"><span>Visiter l’application</span> ↗</a>{% endif %}
+        {% if can_edit %}<a class="flow-button secondary" href="{% url 'admin:hub_application_change' app.pk %}"><span>Modifier la fiche</span></a>{% endif %}
+      </div>
+    </section>
+
+    <section class="flow-card">
+      <h2>{% ui_icon 'wallet' %}<span>Paiements</span></h2>
+      <p>Abonnement du dossier : <strong>{{ app.fee_amount }} FCFA / an</strong></p>
+      {% if app.is_admin_added %}<p class="console-pill is-ok">Ajout administratif sans frais</p>{% endif %}
+      {% for payment in payments %}
+      <div class="flow-payment">
+        <div class="flow-payment-head">
+          <span class="console-pill {% if payment.status == 'success' %}is-ok{% elif payment.status == 'pending' %}is-warn{% else %}is-danger{% endif %}">{{ payment.get_status_display }}</span>
+          <strong>{{ payment.amount }} FCFA</strong>
+          <small>{{ payment.created_at|date:"d/m/Y H:i" }}</small>
+        </div>
+        <code>{{ payment.reference }}</code>
+        {% if payment.verification_message %}<p>{{ payment.verification_message|payment_label }}</p>{% endif %}
+        {% if payment.manual_reference %}
+        <div class="flow-manual-note">
+          <p><strong>Validation manuelle</strong> · {{ payment.manual_confirmed_by|default:"Compte supprimé" }}</p>
+          <p>Justificatif : {{ payment.manual_reference }}<br>{{ payment.manual_note }}</p>
+        </div>
+        {% endif %}
+        {% if payment.verified_at %}
+        <p class="flow-verified">Confirmé le {{ payment.verified_at|date:"d/m/Y H:i" }}</p>
+        {% elif can_pay %}
+        <form method="post" class="flow-action">{% csrf_token %}<input type="hidden" name="action" value="verify"><input type="hidden" name="payment_id" value="{{ payment.pk }}"><button type="submit">Vérifier et valider le paiement</button></form>
+        {% endif %}
+      </div>
+      {% empty %}
+      <p>Aucune tentative de paiement disponible, ou accès aux paiements non autorisé.</p>
+      {% endfor %}
+      <small>La vérification automatique interroge le prestataire. Vous pouvez aussi confirmer un encaissement contrôlé par vos soins.</small>
+      {% if can_pay and not paid and app.status != 'archived' %}
+      <details class="manual-panel" {% if manual_form.errors %}open{% endif %}>
+        <summary>{% ui_icon 'shield' %}<span>Valider le paiement manuellement</span></summary>
+        <p>Utilisez cette option après avoir vérifié le reçu et l’encaissement, même si aucune tentative en ligne n’existe. Cette action sera enregistrée dans l’historique.</p>
+        <form method="post" class="flow-action">{% csrf_token %}<input type="hidden" name="action" value="manual">{{ manual_form.as_p }}<button type="submit">Confirmer la réception du paiement</button></form>
+      </details>
+      {% endif %}
+    </section>
+
+    <section class="flow-card">
+      <h2>{% ui_icon 'shield' %}<span>Décision administrative</span></h2>
+      {% if app.moderation_note %}<blockquote>{{ app.moderation_note }}</blockquote>{% endif %}
+      {% if can_edit %}
+        {% if app.status != 'published' and app.status != 'archived' %}
+        <form method="post" class="flow-action">{% csrf_token %}<input type="hidden" name="action" value="publish"><button type="submit" {% if not paid %}disabled{% endif %}>Valider et publier l’application</button>{% if not paid %}<p class="flow-hint">Confirmez le paiement avant de publier.</p>{% endif %}</form>
+        {% endif %}
+        <form method="post" class="flow-action">
+          {% csrf_token %}
+          <label for="decision-note">Motif / retour au créateur</label>
+          <textarea id="decision-note" name="note" required maxlength="2000" rows="4" placeholder="Expliquez précisément les modifications attendues…"></textarea>
+          <div class="flow-decisions">
+            <button name="action" value="corrections" class="secondary">Demander des corrections</button>
+            <button name="action" value="archive" class="secondary is-danger">Archiver</button>
+          </div>
+        </form>
+      {% else %}
+      <p>Vous disposez d’un accès en lecture seule.</p>
+      {% endif %}
+    </section>
+
+    <section class="flow-card">
+      <h2>{% ui_icon 'clock' %}<span>Historique du dossier</span></h2>
+      <p>Créé le {{ app.created_at|date:"d/m/Y H:i" }} par {{ app.submitted_by|default:"l’administration" }}.</p>
+      {% if app.reviewed_at %}<p>Dernière décision : {{ app.reviewed_at|date:"d/m/Y H:i" }} · {{ app.reviewed_by }}</p>{% endif %}
+      <ol class="flow-history">
+        {% for event in history %}
+        <li><strong>{{ event.action_time|date:"d/m/Y H:i" }} · {{ event.user }}</strong><p>{{ event.get_change_message }}</p></li>
+        {% empty %}
+        <li>Aucune action administrative enregistrée.</li>
+        {% endfor %}
+      </ol>
+      {% if history.has_other_pages %}
+      <nav class="flow-pagination" aria-label="Historique">
+        {% if history.has_previous %}<a href="?{{ return_params }}&amp;history_page={{ history.previous_page_number }}">Plus récents</a>{% endif %}
+        <span>{{ history.number }} / {{ history.paginator.num_pages }}</span>
+        {% if history.has_next %}<a href="?{{ return_params }}&amp;history_page={{ history.next_page_number }}">Plus anciens</a>{% endif %}
+      </nav>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

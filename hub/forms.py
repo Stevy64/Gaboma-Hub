@@ -35,8 +35,11 @@ class ApplicationForm(ApplicationImagesMixin, forms.ModelForm):
         self.fields["creator_name"].required = True
         self.fields["about"].widget = forms.Textarea(attrs={"rows": 5, "placeholder": "À quoi sert votre app ? À qui s'adresse-t-elle ?"})
 
+class StarRating(forms.RadioSelect):
+    option_template_name = "hub/widgets/star_option.html"
+
 class ReviewForm(forms.ModelForm):
-    rating = forms.TypedChoiceField(label="Votre note", coerce=int, choices=[(i, f"{'★' * i} · {i}/5") for i in range(5, 0, -1)], widget=forms.RadioSelect)
+    rating = forms.TypedChoiceField(label="Votre note", coerce=int, choices=[(i, f"{i} sur 5") for i in range(1, 6)], widget=StarRating)
     class Meta:
         model = Review
         fields = ["rating", "comment"]

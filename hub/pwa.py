@@ -25,8 +25,11 @@ def worker(request):
 
 @require_GET
 def manifest(request):
-    return JsonResponse({'id': '/', 'name': 'Gaboma Hub', 'short_name': 'Gaboma Hub',
-        'description': 'Découvrez les applications des créateurs gabonais.',
+    from .models import HubAppearance
+    appearance = HubAppearance.current()
+    name = appearance.site_name or "Gaboma Hub"
+    return JsonResponse({'id': '/', 'name': name, 'short_name': name[:12],
+        'description': appearance.meta_description or "Découvrez les applications des créateurs gabonais.",
         'lang': 'fr', 'start_url': '/', 'scope': '/', 'display': 'standalone',
         'background_color': '#101827', 'theme_color': '#235acb',
         'icons': [{'src': static('hub/icon-192.png'), 'sizes': '192x192', 'type': 'image/png', 'purpose': 'any'},

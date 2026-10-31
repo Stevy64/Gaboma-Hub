@@ -1,8 +1,163 @@
 {% extends "admin/base_site.html" %}{% load hub_tags %}
+{% block content_title %}{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Administration</a> › Suivi des soumissions</div>{% endblock %}
-{% block content %}<div class="flow-shell"><p class="flow-lead">Un dossier, toutes ses étapes. Retrouvez les paiements à contrôler et les applications à valider.</p>
-<form class="flow-search" method="get"><label for="flow-query">Rechercher un dossier</label><div><input id="flow-query" type="search" name="q" value="{{ query }}" placeholder="App, créateur, e-mail, référence de paiement…"><input type="hidden" name="stage" value="{{ stage }}"><button type="submit">{% ui_icon 'search' %}Rechercher</button></div>
-<details class="flow-options" {% if category or ordering != 'newest' or size != 12 %}open{% endif %}><summary>Filtres et affichage</summary><div class="flow-controls"><div><label for="filter-category">Catégorie</label><select id="filter-category" name="category"><option value="">Toutes les catégories</option>{% for item in categories %}<option value="{{ item.pk }}" {% if category == item.pk|stringformat:'s' %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></div><div><label for="filter-sort">Trier par</label><select id="filter-sort" name="sort"><option value="newest" {% if ordering == 'newest' %}selected{% endif %}>Les plus récents</option><option value="oldest" {% if ordering == 'oldest' %}selected{% endif %}>Les plus anciens à traiter</option><option value="name" {% if ordering == 'name' %}selected{% endif %}>Nom de l’application</option></select></div><div><label for="filter-size">Par page</label><select id="filter-size" name="size"><option {% if size == 12 %}selected{% endif %}>12</option><option {% if size == 24 %}selected{% endif %}>24</option><option {% if size == 48 %}selected{% endif %}>48</option></select></div><button type="submit">Appliquer</button></div></details><a class="flow-reset" href="{% url 'admin:hub_application_workflow' %}">Réinitialiser les filtres</a></form>
-<nav class="flow-filters" aria-label="État des dossiers">{% for value,label in stages %}<a {% if stage == value %}aria-current="page"{% endif %} href="?stage={{ value }}&{{ stage_params }}">{% if value == 'pending' %}{% ui_icon 'wallet' %}{% elif value == 'review' %}{% ui_icon 'check' %}{% elif value == 'draft' %}{% ui_icon 'edit' %}{% elif value == 'rejected' %}{% ui_icon 'refresh' %}{% elif value == 'published' %}{% ui_icon 'sparkles' %}{% elif value == 'archived' %}{% ui_icon 'clock' %}{% else %}{% ui_icon 'grid' %}{% endif %}{{ label }}</a>{% endfor %}</nav>
-<p class="flow-count">{{ page.start_index }}–{{ page.end_index }} sur {{ page.paginator.count }} dossiers</p><div class="flow-grid">{% for app in page %}<article class="flow-card"><div class="flow-card-heading">{% if app.logo %}<img src="{{ app.logo.url }}" alt="" width="48" height="48">{% endif %}<div><h2>{{ app.name }}</h2><span>{{ app.category }}</span></div></div><span class="flow-badge">{{ app.get_status_display }}</span><p class="flow-meta">{% ui_icon 'user' %}{{ app.submitted_by|default:"Administration" }} · {{ app.created_at|date:"d/m/Y" }}</p><p class="flow-meta">{% if app.is_admin_added %}{% ui_icon 'shield' %}Ajout sans frais{% elif app.payment_ok %}{% ui_icon 'check' %}Paiement confirmé{% else %}{% ui_icon 'wallet' %}Paiement à confirmer · {{ app.fee_amount }} FCFA{% endif %}</p><a class="flow-button" href="{% url 'admin:hub_application_workflow_detail' app.pk %}?{{ params }}&page={{ page.number }}">Examiner le dossier {% ui_icon 'arrow' %}</a></article>{% empty %}<div class="flow-card"><h2>Aucun dossier ici</h2><p>Choisissez une autre étape ou modifiez la recherche.</p></div>{% endfor %}</div>
-<nav class="flow-pagination" aria-label="Pagination">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&{{ params }}">← Précédent</a>{% endif %}<form method="get">{% for key,value in request.GET.items %}{% if key != 'page' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}<label for="jump-page">Page</label><input id="jump-page" name="page" type="number" min="1" max="{{ page.paginator.num_pages }}" value="{{ page.number }}"><span>/ {{ page.paginator.num_pages }}</span><button type="submit">Aller</button></form>{% if page.has_next %}<a href="?page={{ page.next_page_number }}&{{ params }}">Suivant →</a>{% endif %}</nav></div>{% endblock %}
+{% block content %}
+<div class="flow-shell">
+  <header class="console-top">
+    <div class="console-top-copy">
+      <p class="console-kicker">Pilotage &amp; modération</p>
+      <h1>Suivi des soumissions</h1>
+      <p class="console-lead">Un dossier, toutes ses étapes. Contrôlez les paiements, accompagnez les créateurs et suivez les applications déjà publiées.</p>
+    </div>
+    <div class="console-top-cta">
+      <a class="console-btn console-btn-primary" href="{% url 'admin:hub_application_add' %}">{% ui_icon 'plus' %}<span>Ajouter une app</span></a>
+      <a class="console-btn console-btn-ghost" href="{% url 'admin:hub_payment_changelist' %}">{% ui_icon 'wallet' %}<span>Transactions</span></a>
+    </div>
+  </header>
+
+  <section class="console-kpis" aria-label="Synthèse des dossiers">
+    <a class="console-kpi is-blue" href="?stage=&amp;{{ stage_params }}">
+      <span>Total dossiers</span>
+      <strong data-count="{{ counts.all }}">{{ counts.all }}</strong>
+      <small>Catalogue &amp; dépôts</small>
+    </a>
+    <a class="console-kpi {% if counts.pending %}is-warn{% endif %}" href="?stage=pending&amp;{{ stage_params }}">
+      <span>Paiement en attente</span>
+      <strong data-count="{{ counts.pending }}">{{ counts.pending }}</strong>
+      <small>À vérifier ou relancer</small>
+    </a>
+    <a class="console-kpi {% if counts.review %}is-priority{% endif %}" href="?stage=review&amp;{{ stage_params }}">
+      <span>Prêtes à valider</span>
+      <strong data-count="{{ counts.review }}">{{ counts.review }}</strong>
+      <small>Paiement confirmé</small>
+    </a>
+    <a class="console-kpi is-ok" href="?stage=published&amp;{{ stage_params }}">
+      <span>Publiées en ligne</span>
+      <strong data-count="{{ counts.published }}">{{ counts.published }}</strong>
+      <small>Visibles sur le Hub</small>
+    </a>
+  </section>
+
+  <form class="flow-search" method="get">
+    <div class="flow-search-bar">
+      <label class="sr-only" for="flow-query">Rechercher un dossier</label>
+      <span class="flow-search-ico" aria-hidden="true">{% ui_icon 'search' %}</span>
+      <input id="flow-query" type="search" name="q" value="{{ query }}" placeholder="App, créateur, e-mail, référence de paiement…">
+      <input type="hidden" name="stage" value="{{ stage }}">
+      <button type="submit" class="console-btn console-btn-primary">{% ui_icon 'search' %}<span>Rechercher</span></button>
+      {% if query or stage or category or ordering != 'newest' or size != 50 %}
+      <a class="flow-reset" href="{% url 'admin:hub_application_workflow' %}">Réinitialiser</a>
+      {% endif %}
+    </div>
+    <details class="flow-options" {% if category or ordering != 'newest' or size != 50 %}open{% endif %}>
+      <summary>{% ui_icon 'filter' %}<span>Filtres et affichage</span></summary>
+      <div class="flow-controls">
+        <div>
+          <label for="filter-category">Catégorie</label>
+          <select id="filter-category" name="category">
+            <option value="">Toutes les catégories</option>
+            {% for item in categories %}<option value="{{ item.pk }}" {% if category == item.pk|stringformat:'s' %}selected{% endif %}>{{ item.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="filter-sort">Trier par</label>
+          <select id="filter-sort" name="sort">
+            <option value="newest" {% if ordering == 'newest' %}selected{% endif %}>Les plus récents</option>
+            <option value="oldest" {% if ordering == 'oldest' %}selected{% endif %}>Les plus anciens à traiter</option>
+            <option value="name" {% if ordering == 'name' %}selected{% endif %}>Nom de l’application</option>
+          </select>
+        </div>
+        <div>
+          <label for="filter-size">Par page</label>
+          <select id="filter-size" name="size">
+            {% if size != 25 and size != 50 and size != 100 %}<option value="{{ size }}" selected>{{ size }}</option>{% endif %}
+            <option value="25" {% if size == 25 %}selected{% endif %}>25</option>
+            <option value="50" {% if size == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if size == 100 %}selected{% endif %}>100</option>
+          </select>
+        </div>
+        <button type="submit" class="console-btn console-btn-primary">Appliquer</button>
+      </div>
+    </details>
+  </form>
+
+  <nav class="flow-filters" aria-label="État des dossiers">
+    {% for value,label,count in stages %}
+    <a {% if stage == value %}aria-current="page"{% endif %} href="?stage={{ value }}&amp;{{ stage_params }}">
+      {% if value == 'pending' %}{% ui_icon 'wallet' %}{% elif value == 'review' %}{% ui_icon 'check' %}{% elif value == 'draft' %}{% ui_icon 'edit' %}{% elif value == 'rejected' %}{% ui_icon 'refresh' %}{% elif value == 'published' %}{% ui_icon 'sparkles' %}{% elif value == 'archived' %}{% ui_icon 'clock' %}{% else %}{% ui_icon 'grid' %}{% endif %}
+      <span>{{ label }}</span>
+      <b class="flow-filter-count">{{ count }}</b>
+    </a>
+    {% endfor %}
+  </nav>
+
+  <p class="flow-count">{{ page.start_index }}–{{ page.end_index }} sur {{ page.paginator.count }} dossier{{ page.paginator.count|pluralize }}</p>
+
+  {% if page and can_edit %}
+  <form method="post" class="flow-bulk" id="flow-bulk" action="?{{ params }}">
+    {% csrf_token %}
+    <div class="flow-bulk-bar">
+      <label class="flow-select-page"><input type="checkbox" id="flow-select-page"> <span>Cette page ({{ page|length }})</span></label>
+      <label class="sr-only" for="flow-action">Action groupée</label>
+      <select id="flow-action" name="action">
+        <option value="">Action groupée…</option>
+        <option value="publish">Publier après contrôle du paiement</option>
+        <option value="corrections">Demander des corrections</option>
+        <option value="archive">Archiver</option>
+      </select>
+      <button type="submit" class="console-btn console-btn-primary">Appliquer</button>
+      <input type="hidden" name="select_across" value="0" id="flow-select-across" data-total="{{ page.paginator.count }}">
+      {% if page.paginator.count > page|length %}
+      <button type="button" class="flow-across" id="flow-across">Tout le filtre ({{ page.paginator.count }})</button>
+      {% endif %}
+    </div>
+  </form>
+  {% endif %}
+
+  <div class="flow-grid flow-ledger">
+    {% for app in page %}
+    <article class="flow-card flow-row">
+      {% if can_edit %}
+      <label class="flow-check"><input form="flow-bulk" type="checkbox" name="selected" value="{{ app.pk }}" class="flow-select"><span class="sr-only">Sélectionner {{ app.name }}</span></label>
+      {% endif %}
+      <div class="flow-card-heading">
+        {% if app.logo %}
+        <img src="{{ app.logo.url }}" alt="" width="36" height="36">
+        {% else %}
+        <span class="console-card-avatar" aria-hidden="true">{{ app.name|slice:":1"|upper }}</span>
+        {% endif %}
+        <div>
+          <h2>{{ app.name }}</h2>
+          <span>{{ app.category }}</span>
+        </div>
+      </div>
+      <div class="flow-row-meta">
+        <span class="console-pill {% if app.status == 'published' %}is-ok{% elif app.status == 'review' %}is-blue{% elif app.status == 'rejected' %}is-danger{% elif app.status == 'archived' %}is-muted{% else %}is-warn{% endif %}">{{ app.get_status_display }}</span>
+        <p class="flow-meta" data-label="Déposant">{% ui_icon 'user' %}<span>{{ app.submitted_by|default:"Administration" }} · {{ app.created_at|date:"d/m/Y" }}</span></p>
+        <p class="flow-meta {% if app.is_admin_added or app.payment_ok %}is-ok{% else %}is-warn{% endif %}" data-label="Paiement">
+          {% if app.is_admin_added %}{% ui_icon 'shield' %}<span>Ajout sans frais</span>{% elif app.payment_ok %}{% ui_icon 'check' %}<span>Abonnement à jour</span>{% else %}{% ui_icon 'wallet' %}<span>À régler · {{ app.fee_amount }} FCFA / an</span>{% endif %}
+        </p>
+      </div>
+      <a class="flow-button" href="{% url 'admin:hub_application_workflow_detail' app.pk %}?{{ params }}&amp;page={{ page.number }}">Examiner</a>
+    </article>
+    {% empty %}
+    <div class="flow-card flow-empty">
+      <h2>Aucun dossier ici</h2>
+      <p>Choisissez une autre étape ou modifiez la recherche.</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <nav class="flow-pagination" aria-label="Pagination">
+    {% if page.has_previous %}<a class="console-btn console-btn-ghost" href="?page={{ page.previous_page_number }}&amp;{{ params }}">← Précédent</a>{% endif %}
+    <form method="get">
+      {% for key,value in request.GET.items %}{% if key != 'page' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
+      <label for="jump-page">Page</label>
+      <input id="jump-page" name="page" type="number" min="1" max="{{ page.paginator.num_pages }}" value="{{ page.number }}">
+      <span>/ {{ page.paginator.num_pages }}</span>
+      <button type="submit" class="console-btn console-btn-ghost">Aller</button>
+    </form>
+    {% if page.has_next %}<a class="console-btn console-btn-ghost" href="?page={{ page.next_page_number }}&amp;{{ params }}">Suivant →</a>{% endif %}
+  </nav>
+</div>
+{% endblock %}
