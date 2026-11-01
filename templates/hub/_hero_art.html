@@ -1,6 +1,6 @@
 {% load hub_tags %}
 <div class="hub-hero-art{% if directory_filters|length > 4 %} tiles-many{% endif %}">
  <div class="hub-orbit orbit-one" aria-hidden="true"></div><div class="hub-orbit orbit-two" aria-hidden="true"></div>
- <div class="hub-art-core" aria-hidden="true">{% ui_icon 'grid' %}<span>gaboma hub<span class="art-dot">.</span></span><small>{{ appearance.art_caption|default:"Vos apps, un seul endroit." }}</small></div>
+ <div class="hub-art-core" aria-hidden="true">{% ui_icon 'grid' %}<span>Gabomahub<span class="art-dot">.</span></span><small>{{ appearance.art_caption|default:"Vos apps, un seul endroit." }}</small></div>
  {% for item in directory_filters %}<a class="hub-art-tile tone-{{ item.tone }}" href="/?categorie={{ item.category.slug }}#applications">{% ui_icon item.icon %}<span>{{ item.label }}</span></a>{% endfor %}
 </div>

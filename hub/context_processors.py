@@ -2,8 +2,6 @@ from .models import CatalogueFilter, HubAppearance
 
 def hub_context(request):
     sections = {
-        "login": ("Votre compte", "Connexion"),
-        "signup": ("Votre compte", "Inscription"),
         "password_reset": ("Votre compte", "Récupérer l'accès"),
         "password_reset_done": ("Votre compte", "Récupérer l'accès"),
         "password_reset_confirm": ("Votre compte", "Nouveau mot de passe"),

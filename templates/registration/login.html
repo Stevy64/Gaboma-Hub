@@ -1,22 +1,3 @@
-{% extends 'base.html' %}{% load hub_tags %}
+{% extends 'base.html' %}
 {% block title %}Connexion · Gaboma Hub{% endblock %}
-{% block content %}
-<section class="page-shell auth-shell">
-  <div class="auth-card">
-    <p class="auth-kicker">Compte</p>
-    <h1>Connexion</h1>
-    <p class="lead">Retrouvez vos favoris et le suivi de vos applications.</p>
-    <form method="post" class="hub-form">
-      {% csrf_token %}
-      {{ form.non_field_errors }}
-      {% for field in form %}
-      <div class="field"><label for="{{ field.id_for_label }}">{% field_icon field.name %}{{ field.label }}</label>{{ field }}{{ field.errors }}</div>
-      {% endfor %}
-      <input type="hidden" name="next" value="{{ next }}">
-      <button class="primary-button" type="submit">{% ui_icon 'login' %}Se connecter</button>
-      <a class="text-button" href="{% url 'password_reset' %}">Mot de passe oublié ?</a>
-    </form>
-    <p class="auth-alternative">Pas encore de compte ? <a href="{% url 'hub:signup' %}">Créer un compte</a></p>
-  </div>
-</section>
-{% endblock %}
+{% block content %}{% include 'registration/_auth.html' %}{% endblock %}

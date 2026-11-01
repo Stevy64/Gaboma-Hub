@@ -1,0 +1,67 @@
+{% load i18n static %}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% if form.errors %}Erreur · {% endif %}Connexion · Gaboma Hub</title>
+  <link rel="icon" href="{% static 'hub/favicon.svg' %}" type="image/svg+xml">
+  <script src="{% static 'hub/theme-init.js' %}?v=20261030-light"></script>
+  <link rel="stylesheet" href="{% static 'hub/admin-console.css' %}?v=20261102-gate2">
+</head>
+<body class="admin-gate">
+  <main class="admin-gate-card">
+    <a class="admin-gate-brand" href="{% url 'hub:home' %}">
+      <span class="console-mark">G</span>
+      <span><strong>Gabomahub.</strong><small>CONSOLE</small></span>
+    </a>
+    <p class="admin-gate-kicker">Espace d'administration</p>
+    <h1>Connexion</h1>
+    <p class="admin-gate-lead">Suivi des applications, des paiements et du catalogue.</p>
+
+    {% if form.non_field_errors %}
+      {% for error in form.non_field_errors %}<p class="admin-gate-note">{{ error }}</p>{% endfor %}
+    {% endif %}
+    {% if user.is_authenticated %}
+      <p class="admin-gate-note">Vous êtes connecté en tant que {{ username }}, sans accès à cette page. Connectez-vous avec un autre compte.</p>
+    {% endif %}
+
+    <form class="admin-gate-form" action="{{ app_path }}" method="post" id="login-form">
+      {% csrf_token %}
+      <div class="admin-gate-field">
+        <label for="{{ form.username.id_for_label }}">Nom d'utilisateur</label>
+        {{ form.username }}
+        {{ form.username.errors }}
+      </div>
+      <div class="admin-gate-field">
+        <label for="{{ form.password.id_for_label }}">Mot de passe</label>
+        <div class="admin-gate-password">
+          {{ form.password }}
+          <button class="admin-gate-eye" type="button" aria-label="Afficher le mot de passe" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        {{ form.password.errors }}
+      </div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="admin-gate-submit" type="submit">Entrer dans la console</button>
+    </form>
+    <div class="admin-gate-links">
+      {% url 'admin:password_reset' as password_reset_url %}
+      {% if password_reset_url %}<a href="{{ password_reset_url }}">Mot de passe oublié</a>{% endif %}
+      <a href="{% url 'hub:home' %}">Retour au Hub</a>
+    </div>
+  </main>
+  <script>
+    document.querySelectorAll(".admin-gate-eye").forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = button.parentElement.querySelector("input");
+        const shown = input.type === "text";
+        input.type = shown ? "password" : "text";
+        button.setAttribute("aria-pressed", String(!shown));
+        button.setAttribute("aria-label", shown ? "Afficher le mot de passe" : "Masquer le mot de passe");
+      });
+    });
+  </script>
+</body>
+</html>

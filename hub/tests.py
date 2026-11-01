@@ -20,7 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 from .admin import ApplicationAdmin, AppearanceAdmin
 from .forms import ApplicationForm
-from .models import Application, CatalogueFilter, Category, Favorite, HeroSlide, Payment, PaymentEvent, Review, HubAppearance, Advertisement, SubmissionNotice
+from .models import Application, CatalogueFilter, Category, Favorite, HeroSlide, Payment, PaymentEvent, Review, HubAppearance, HubVisitor, Advertisement, SubmissionNotice
 from .payments.services import PaymentUnavailable, checkout_url_is_safe, exact_amount, start_checkout, verify_payment
 from .payments.singpay import SingPayService
 
@@ -41,7 +41,7 @@ class HubTestCase(TestCase):
         self.admin = User.objects.create_superuser("admin-test", email="admin@example.test", password="AdminDeTest789!")
         self.category = Category.objects.create(name="Productivité", slug="productivite")
         self.app = Application.objects.create(name="Application externe", slug="application-externe", category=self.category,
-            description="Un outil d'un autre éditeur.", website_url="https://example.com", submitted_by=self.user)
+            description="Un outil d'un autre éditeur.", website_url="https://example.com", submitted_by=self.user, fee_amount=2000)
     def image_upload(self, name="image.png"):
         output = BytesIO()
         Image.new("RGB", (64, 32), "blue").save(output, format="PNG")
@@ -325,7 +325,7 @@ class CatalogueTests(HubTestCase):
         self.assertEqual(response.status_code, 302)
         app = Application.objects.get(name="App d'un tiers")
         self.assertEqual(app.status, Application.Status.DRAFT)
-        self.assertEqual(app.fee_amount, 2500)
+        self.assertEqual(app.fee_amount, 5000)
         self.assertEqual(app.submitted_by, self.user)
         self.assertFalse(app.is_admin_added)
     def test_unsafe_urls_are_rejected(self):
@@ -595,6 +595,37 @@ class ManagedShowcaseTests(HubTestCase):
         self.assertNotContains(page, "Marché caché")
         self.assertContains(page, "data-hero-next")
 
+    def test_public_layout_price_visitors_and_admin_logo(self):
+        home = self.client.get("/")
+        self.assertEqual(home.context["submission_fee"], 5000)
+        self.assertContains(home, "Vos applications 100% Gaboma")
+        self.assertContains(home, 'class="hero-poles"')
+        self.assertContains(home, "LE GABON NUMÉRIQUE.")
+        self.assertContains(home, 'class="gabon-flag"')
+        self.assertNotContains(home, "Pensé au Gabon")
+        self.assertNotContains(home, 'class="compact-action"')
+        self.client.get("/")
+        self.assertEqual(HubVisitor.objects.count(), 1)
+        Client().get("/")
+        self.assertEqual(HubVisitor.objects.count(), 2)
+        login_page = self.client.get(reverse("login"))
+        signup_page = self.client.get(reverse("hub:signup"))
+        self.assertContains(login_page, 'class="auth-switch"')
+        self.assertContains(login_page, "Inscription")
+        self.assertContains(signup_page, "Créer mon compte")
+        self.assertContains(signup_page, 'aria-selected="true"')
+        self.client.force_login(self.admin)
+        self.client.get("/")
+        self.assertEqual(HubVisitor.objects.count(), 2)
+        console = self.client.get(reverse("admin:index"))
+        self.assertContains(console, "Visiteurs uniques")
+        self.assertContains(console, "Logo du Hub")
+        self.assertNotContains(self.client.get(reverse("hub:dashboard")), ">Administration</a>")
+        uploaded = self.client.post(reverse("admin:hub_hubappearance_logo"), {"logo": self.image_upload()})
+        self.assertEqual(uploaded.status_code, 302)
+        self.assertTrue(HubAppearance.objects.get().logo.name.endswith(".webp"))
+        self.assertContains(self.client.get("/"), 'class="brand-logo"')
+
     def test_admin_uploads_hero_slide(self):
         self.client.force_login(self.admin)
         response = self.client.post(reverse("admin:hub_advertisement_add"), {"title": "Vitrine test", "image": self.image_upload(), "placement": "hero", "order": 0, "is_active": "on", "_save": "Enregistrer"})
@@ -649,7 +680,7 @@ class ManagedShowcaseTests(HubTestCase):
         self.client.force_login(self.admin)
         page = self.client.get(reverse("admin:hub_payment_changelist"))
         self.assertContains(page, "Tarif annuel")
-        self.assertContains(page, 'value="2500"')
+        self.assertContains(page, 'value="5000"')
         refused = self.client.post(reverse("admin:hub_payment_changelist"), {"submission_fee": "0", "set_submission_fee": "1"})
         self.assertEqual(refused.status_code, 302)
         self.assertFalse(HubAppearance.objects.exists())

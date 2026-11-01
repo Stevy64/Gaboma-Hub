@@ -1,0 +1,37 @@
+{% load hub_tags %}
+<section class="page-shell auth-shell">
+  <div class="auth-card">
+    <p class="auth-kicker">Compte</p>
+    <h1>{% if auth_mode == 'signup' %}Créer un compte{% else %}Connexion{% endif %}</h1>
+    <p class="lead">{% if auth_mode == 'signup' %}L'inscription et les favoris sont gratuits. Seule la soumission d'une application est payante.{% else %}Retrouvez vos favoris et le suivi de vos applications.{% endif %}</p>
+    <div class="auth-switch" role="tablist" aria-label="Connexion ou inscription">
+      <a role="tab" href="{% url 'login' %}{% if next %}?next={{ next|urlencode }}{% endif %}" aria-selected="{% if auth_mode == 'signup' %}false{% else %}true{% endif %}">Connexion</a>
+      <a role="tab" href="{% url 'hub:signup' %}" aria-selected="{% if auth_mode == 'signup' %}true{% else %}false{% endif %}">Inscription</a>
+    </div>
+    {% if auth_mode == 'signup' %}
+    <form class="hub-form" method="post" action="{% url 'hub:signup' %}">
+      {% csrf_token %}
+      {{ signup_form.non_field_errors }}
+      {% for field in signup_form %}
+      {% if field.name == 'accept_terms' %}
+      <div class="field consent-field">{{ field }}<label for="{{ field.id_for_label }}">J'ai lu et j'accepte les <a href="{% url 'hub:terms' %}" data-legal="terms">conditions générales d'utilisation</a>.</label>{{ field.errors }}</div>
+      {% else %}
+      <div class="field"><label for="{{ field.id_for_label }}">{% field_icon field.name %}{{ field.label }}</label>{{ field }}{{ field.errors }}{% if field.help_text %}<div class="help-text">{{ field.help_text|safe }}</div>{% endif %}</div>
+      {% endif %}
+      {% endfor %}
+      <button class="primary-button" type="submit">{% ui_icon 'user' %}Créer mon compte</button>
+    </form>
+    {% else %}
+    <form method="post" class="hub-form" action="{% url 'login' %}">
+      {% csrf_token %}
+      {{ login_form.non_field_errors }}
+      {% for field in login_form %}
+      <div class="field"><label for="{{ field.id_for_label }}">{% field_icon field.name %}{{ field.label }}</label>{{ field }}{{ field.errors }}</div>
+      {% endfor %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="primary-button" type="submit">{% ui_icon 'login' %}Se connecter</button>
+      <a class="text-button" href="{% url 'password_reset' %}">Mot de passe oublié ?</a>
+    </form>
+    {% endif %}
+  </div>
+</section>

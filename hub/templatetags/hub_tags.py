@@ -19,6 +19,8 @@ ICONS = {
     "user": '<circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>',
     "lock": '<rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
     "mail": '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 7 9 6 9-6"/>',
+    "phone": '<path d="M7 3h4l1 4-2 1a12 12 0 0 0 6 6l1-2 4 1v4a2 2 0 0 1-2 2A16 16 0 0 1 5 5a2 2 0 0 1 2-2Z"/>',
+    "download": '<path d="M12 4v10m0 0 4-4m-4 4-4-4M5 19h14"/>',
     "link": '<path d="m10 13 4-4m-6 7-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 0 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 1)"/>',
     "image": '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/>',
     "text": '<path d="M4 5h16M4 10h16M4 15h12M4 20h8"/>',
@@ -109,7 +111,7 @@ def _daily_series(qs, date_field, days=14, amount_field=None):
 
 @register.simple_tag(takes_context=True)
 def console_overview(context):
-    from hub.models import Application, Payment, Advertisement, Review, HubAppearance, SubmissionNotice
+    from hub.models import Application, Payment, Advertisement, Review, HubAppearance, HubVisitor, SubmissionNotice
     user = context["request"].user
     can_apps = user.has_perm("hub.view_application")
     can_pay = user.has_perm("hub.view_payment")
@@ -172,15 +174,20 @@ def console_overview(context):
         "chart_apps": chart_apps,
         "chart_payments": chart_payments,
         "settings_url": settings_url,
+        "visitor_count": HubVisitor.objects.count() if user.is_staff else 0,
+        "can_edit_logo": user.has_perm("hub.change_hubappearance"),
+        "logo_url": appearance_obj.logo.url if appearance_obj and appearance_obj.logo else "",
     }
 
 
 @register.simple_tag(takes_context=True)
 def console_metrics(context):
     from django.urls import reverse
-    from hub.models import Application, Payment, Advertisement, SubmissionNotice
+    from hub.models import Application, Payment, Advertisement, HubVisitor, SubmissionNotice
     user = context['request'].user
     result = []
+    if user.is_staff:
+        result.append({'label': 'Visiteurs uniques', 'value': HubVisitor.objects.count(), 'help': 'Un cookie par navigateur', 'icon': 'eye', 'url': reverse('admin:index')})
     if user.has_perm('hub.view_application'):
         result.extend([
             {'label': 'Applications publiées', 'value': Application.objects.filter(status='published').count(), 'help': 'Explorer le catalogue', 'icon': 'grid', 'url': reverse('admin:hub_application_changelist') + '?status__exact=published'},

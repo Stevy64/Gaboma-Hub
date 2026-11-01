@@ -31,6 +31,24 @@
 </section>
 {% endif %}
 
+{% if ov.can_edit_logo %}
+<section class="console-panel console-logo-panel" aria-labelledby="hub-logo-title">
+  <div class="console-panel-head">
+    <div>
+      <p class="console-panel-kicker">Identité du site</p>
+      <h3 id="hub-logo-title">Logo du Hub</h3>
+    </div>
+  </div>
+  <form class="console-logo-form" method="post" enctype="multipart/form-data" action="{% url 'admin:hub_hubappearance_logo' %}">
+    {% csrf_token %}
+    {% if ov.logo_url %}<img class="console-logo-preview" src="{{ ov.logo_url }}" alt="Logo actuel du Hub">{% else %}<p>Aucun logo pour le moment. Le symbole par défaut reste affiché en haut du site.</p>{% endif %}
+    <label for="hub-logo">Ajouter ou remplacer le logo<span>JPG, PNG ou WebP · 5 Mo · carré conseillé 512 × 512</span></label>
+    <input id="hub-logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" required>
+    <button class="console-btn console-btn-primary" type="submit">{% ui_icon 'image' %}<span>Enregistrer le logo</span></button>
+  </form>
+</section>
+{% endif %}
+
 {% if ov.can_apps or ov.can_pay or ov.can_settings or ov.can_filters %}
 <section class="console-hero-actions" aria-label="Actions prioritaires">
   {% if ov.can_apps %}

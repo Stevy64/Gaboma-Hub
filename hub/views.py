@@ -3,6 +3,8 @@ import uuid
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login
+from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.views import LoginView
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
@@ -125,7 +127,10 @@ class CataloguePage:
 
 @require_GET
 def home(request):
-    visitor_count, visitor_token = visitor_stats(request)
+    visitor_count = getattr(request, "visitor_count", None)
+    visitor_token = None
+    if visitor_count is None:
+        visitor_count, visitor_token = visitor_stats(request)
     available_count = Application.objects.filter(status=Application.Status.PUBLISHED).exclude(website_url="").count()
     appearance = request.hub_appearance = HubAppearance.current()
     apps, query, category, favorites_only, sort = catalogue_filters(request, published_apps())
@@ -227,6 +232,24 @@ def toggle_favorite(request, public_id):
     if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()): next_url = reverse("hub:home")
     return redirect(next_url)
 
+def prepare_auth_forms(login_form, signup_form):
+    login_form.fields["username"].widget.attrs.setdefault("placeholder", "Nom d'utilisateur")
+    login_form.fields["password"].widget.attrs.setdefault("placeholder", "Mot de passe")
+    signup_form.fields["username"].widget.attrs.setdefault("placeholder", "Nom d'utilisateur")
+    signup_form.fields["email"].widget.attrs.setdefault("placeholder", "vous@email.com")
+    signup_form.fields["password1"].widget.attrs.setdefault("placeholder", "8 caractères minimum")
+    signup_form.fields["password2"].widget.attrs.setdefault("placeholder", "Répéter le mot de passe")
+    return login_form, signup_form
+
+class HubLoginView(LoginView):
+    template_name = "registration/login.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["auth_mode"] = "login"
+        context["login_form"], context["signup_form"] = prepare_auth_forms(context["form"], SignupForm())
+        return context
+
 def signup(request):
     if request.user.is_authenticated: return redirect("hub:dashboard")
     form = SignupForm(request.POST or None)
@@ -235,7 +258,8 @@ def signup(request):
         login(request, user)
         messages.success(request, "Votre compte est créé. Bienvenue dans le hub !")
         return redirect("hub:dashboard")
-    return render(request, "registration/signup.html", {"form": form})
+    login_form, signup_form = prepare_auth_forms(AuthenticationForm(request), form)
+    return render(request, "registration/signup.html", {"auth_mode": "signup", "login_form": login_form, "signup_form": signup_form})
 
 @login_required
 @require_GET

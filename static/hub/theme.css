@@ -219,3 +219,46 @@ html body .hub-form .checkbox-field>label a,html body .auth-card .consent-field>
 [data-theme=dark] .footer-col a,[data-theme=dark] .footer-col button{color:#d7e4ff}
 [data-theme=dark] .auth-card{background:#192538;border-color:#34445b;color:#edf3fc}
 [data-theme=dark] .legal-meta,[data-theme=dark] .footer-reserve,[data-theme=dark] .footer-col p{color:#b7c6dc}
+
+html body .site-footer{position:relative;gap:22px;padding-top:26px;border-top:0}
+html body .site-footer::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;border-radius:99px;background:linear-gradient(90deg,#139367 0 33.33%,#efc634 33.33% 66.66%,#2876c9 66.66%)}
+html body .footer-main{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:start;gap:28px 48px}
+html body .footer-main:has(.footer-col){grid-template-columns:minmax(0,1.3fr) minmax(160px,240px) max-content}
+html body .footer-brand,html body .footer-heading{margin:0;padding:0;min-height:32px;display:flex;align-items:center;font:800 18px/1 var(--heading);letter-spacing:-.04em;color:#1d4e9f;text-transform:none}
+html body .footer-brand span{color:#f58a29}
+html body .footer-lead{margin:10px 0 0;max-width:360px;font-size:13.5px;line-height:1.65;color:#5c6e88}
+html body .footer-colophon{display:block;margin-top:4px;color:#7d8da3}
+html body .footer-col,html body .footer-info{display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin:0;max-width:none;text-align:left}
+html body .footer-info{justify-self:end}
+html body .footer-col a,html body .footer-info a,html body .footer-info button{display:flex;align-items:center;gap:10px;min-height:36px;padding:0;border:0;background:none;color:#243652;font:550 13.5px/1.3 var(--font);text-align:left;text-decoration:none;cursor:pointer}
+html body .footer-col .ui-icon,html body .footer-info .ui-icon{width:16px;height:16px;color:#235acb}
+html body .footer-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:6px;padding-top:16px;border-top:1px solid #e6ebf2}
+html body .footer-tricolor{display:flex;gap:5px;width:72px}
+html body .footer-tricolor i{height:4px;flex:1;border-radius:6px;background:#139367}
+html body .footer-tricolor i:nth-child(2){background:#efc634}
+html body .footer-tricolor i:nth-child(3){background:#2876c9}
+[data-theme=dark] .footer-brand,[data-theme=dark] .footer-heading{color:#e8eef8}
+[data-theme=dark] .footer-brand span{color:#ffb16d}
+[data-theme=dark] .footer-col a,[data-theme=dark] .footer-info a,[data-theme=dark] .footer-info button{color:#d7e4ff}
+[data-theme=dark] .footer-col .ui-icon,[data-theme=dark] .footer-info .ui-icon{color:#9db7ee}
+[data-theme=dark] .footer-lead,[data-theme=dark] .footer-reserve,[data-theme=dark] .footer-colophon{color:#b7c6dc}
+[data-theme=dark] .footer-bar{border-color:#2a3a52}
+@media(max-width:760px){html body .footer-main,html body .footer-main:has(.footer-col){grid-template-columns:1fr;gap:22px}html body .footer-info{justify-self:start}}
+
+html body .hero-poles{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;grid-column:1/-1;position:relative;z-index:1;margin-bottom:6px}
+html body .hero-poles .gabon-signature{width:76px;margin:0;flex:none}
+html body .hero-poles .gabon-flag{width:18px;height:13px;flex:none;border-radius:1px;box-shadow:none}
+html body .hero-poles .local-badge{width:fit-content;margin:0 0 0 auto;font-size:9px;letter-spacing:1.7px;font-weight:500;gap:9px;padding:9px 12px;border-radius:30px}
+html .editorial-hero.has-hero-background>.hero-background-image,html .editorial-hero.has-hero-background .hero-slide.is-active{opacity:.82}
+
+html body .app-card.compact-card .compact-cover{aspect-ratio:4/3;max-height:none}
+html body .app-card.compact-card .compact-body{padding-bottom:14px}
+
+html body .auth-card{width:min(460px,100%);padding:28px 24px 22px;border-radius:28px}
+html body .auth-switch{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:0 0 18px;padding:4px;background:#eef2f8;border-radius:999px}
+html body .auth-switch a{display:grid;place-items:center;min-height:42px;border-radius:999px;color:#5c6e88;font-weight:650;text-decoration:none}
+html body .auth-switch a[aria-selected="true"]{background:#fff;color:#12243f;box-shadow:0 2px 8px rgba(18,28,51,.08)}
+html body .auth-card .hub-form input:not([type="checkbox"]){min-height:48px;border-radius:14px;background:#f7f9fc}
+[data-theme=dark] .auth-switch{background:#121b2b}
+[data-theme=dark] .auth-switch a{color:#b7c6dc}
+[data-theme=dark] .auth-switch a[aria-selected="true"]{background:#24344c;color:#f4f7ff}

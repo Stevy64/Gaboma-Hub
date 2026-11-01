@@ -55,6 +55,9 @@ class AppearanceForm(forms.ModelForm):
     def clean_ios_app(self):
         return self._native_file(self.cleaned_data.get("ios_app"), ".ipa", "Apple")
 
+class HubLogoForm(forms.Form):
+    logo = PublicImageField(label="Logo du Hub", widget=forms.FileInput(attrs={"accept": "image/png,image/jpeg,image/webp"}))
+
 class HeroSlideForm(forms.ModelForm):
     image = PublicImageField(label="Image", help_text="JPG, PNG ou WebP · 5 Mo maximum. Format paysage conseillé : 1600 × 900. Les images défilent dans le hero.")
     class Meta:
@@ -82,6 +85,25 @@ class AppearanceAdmin(admin.ModelAdmin):
     def updated_short(self, obj):
         return timezone.localtime(obj.updated_at).strftime("%d %b %Y · %H:%M") if obj.updated_at else "—"
     inlines = [HeroSlideInline]
+
+    def get_urls(self):
+        from django.urls import path
+        return [path("logo/", self.admin_site.admin_view(self.upload_logo), name="hub_hubappearance_logo")] + super().get_urls()
+
+    def upload_logo(self, request):
+        if request.method != "POST":
+            return HttpResponseRedirect(reverse("admin:index"))
+        if not request.user.has_perm("hub.change_hubappearance"):
+            return HttpResponseForbidden("Vous ne pouvez pas modifier le logo.")
+        form = HubLogoForm(request.POST, request.FILES)
+        if form.is_valid():
+            appearance = HubAppearance.objects.first() or HubAppearance()
+            appearance.logo = form.cleaned_data["logo"]
+            appearance.save()
+            messages.success(request, "Le logo du Hub est enregistré. Il apparaît en haut du site.")
+        else:
+            messages.error(request, "Le logo n'a pas été enregistré. Utilisez un JPG, PNG ou WebP de 5 Mo maximum.")
+        return HttpResponseRedirect(reverse("admin:index"))
     fieldsets = [
         ("Identité", {"fields": ["logo", ("site_name", "art_caption"), "document_title", "meta_description"], "description": "Ces textes sont utilisés sur le site public. Les clés de paiement restent dans la configuration du serveur."}),
         ("Texte de l'accueil", {"fields": ["hero_badge", ("hero_title", "hero_subtitle"), "hero_description", ("hero_primary_label", "hero_secondary_label"), "territory_line"]}),
@@ -342,10 +364,10 @@ class ApplicationAdmin(admin.ModelAdmin):
         }
     search_fields = ["name", "website_url", "submitted_by__username", "creator_name"]
     prepopulated_fields = {"slug": ("name",)}
-    readonly_fields = ["public_id", "is_admin_added", "fee_amount", "reviewed_by", "reviewed_at", "created_at", "updated_at", "payment_confirmed"]
+    readonly_fields = ["public_id", "is_admin_added", "fee_amount", "reviewed_by", "reviewed_at", "created_at", "updated_at", "payment_confirmed", "logo_preview"]
     fieldsets = [
         ("Identité & catégorie", {"description": "Le nom, la catégorie et le résumé que verront les visiteurs.", "fields": [("name", "slug"), ("category", "status"), "description", "about"]}),
-        ("Visuels & liens", {"description": "Le logo, la bannière et l’adresse pour ouvrir l’application.", "fields": [("logo", "banner"), "website_url", ("color", "icon")]}),
+        ("Visuels & liens", {"description": "Ajoutez ou remplacez le logo et la bannière. Le logo est aussi demandé lors d'une soumission publique.", "fields": [("logo", "logo_preview"), "banner", "website_url", ("color", "icon")]}),
         ("Créateur & modération", {"description": "Qui porte le projet, et le message à lui laisser.", "fields": [("creator_name", "creator_city"), "submitted_by", "moderation_note"]}),
         ("Suivi & paiement", {"description": "Ces informations se remplissent toutes seules.", "fields": [("is_admin_added", "payment_confirmed", "fee_amount"), ("reviewed_by", "reviewed_at"), ("created_at", "updated_at"), "public_id"]}),
     ]
@@ -355,6 +377,12 @@ class ApplicationAdmin(admin.ModelAdmin):
             return [item for item in fieldsets if item[0] != "Suivi & paiement"]
         return fieldsets
     actions = ["approve_applications", "request_corrections", "archive_applications"]
+    @admin.display(description="Aperçu du logo")
+    def logo_preview(self, obj):
+        if not obj or not getattr(obj, "logo", None):
+            return "Aucun logo pour le moment."
+        return format_html('<img src="{}" alt="" class="console-thumb console-logo-preview">', obj.logo.url)
+
     @admin.display(boolean=True, description="Paiement confirmé")
     def payment_confirmed(self, obj): return obj.paid
     @admin.display(description="Statut", ordering="status")
